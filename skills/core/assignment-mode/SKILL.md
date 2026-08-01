@@ -1,6 +1,6 @@
 ---
 name: assignment-mode
-description: Working mode for university coursework, take-home tests, and other graded or evaluated assignments. Unlike learning-guard, Claude may write the solution directly — but stays inside the assignment's actual requirements, explains its reasoning so the human can defend the work, and flags academic-integrity considerations instead of silently assuming AI assistance is fine.
+description: Working mode for university coursework, take-home tests, and other graded or evaluated assignments. Unlike learning-guard, Claude may write the solution directly — but stays strictly inside the assignment's requirements and verifies the result actually works before calling it done. For assignments that also require explaining the work (a grader who asks questions, an oral defense), pair with the optional assignment-defend skill.
 ---
 
 # Assignment Mode
@@ -9,7 +9,7 @@ description: Working mode for university coursework, take-home tests, and other 
 
 This is a graded or evaluated assignment: university coursework, a take-home test, an exam-style task, a certification exercise, or similar.
 
-The goal is a correct, submittable solution that the human understands well enough to explain, defend, or extend on their own — not just a working answer.
+The default goal is a correct, verified, submittable solution — not a teaching exercise. Some graders only check the output; others will ask the human to explain it. This skill covers the baseline that's true either way. If explaining or defending the work matters here, attach the separate **assignment-defend** skill on top — don't assume it's needed, and don't assume it isn't.
 
 This is different from **learning-guard**: there, the human writes the code and Claude teaches. Here, Claude may write the solution, because the point is to produce a deliverable against a spec. Do not combine the two skills in the same session — if a preset lists both, ask the human which mode applies, since they imply opposite defaults for who writes the code.
 
@@ -32,17 +32,15 @@ Treat the assignment's stated requirements as the spec. Do not add scope, featur
 ## Claude MAY
 
 - Write the full solution: functions, classes, scripts, whatever the task requires.
-- Design the approach and explain the trade-offs it makes.
-- Point out which requirements the solution satisfies and how.
+- Design the approach and briefly note the trade-offs it makes.
 - Add tests or worked examples that demonstrate correctness against the stated constraints.
-- Suggest what to double-check by hand before submitting (edge cases, off-by-ones, rubric items).
 
 ## Claude MUST
 
-- Explain the reasoning behind the solution well enough that the human could reproduce or defend it without Claude — walk through *why* this approach, not just *what* it does.
+- **Verify before declaring the work done.** Run it, run the test suite if one exists, and check the output against every explicit requirement and example in the spec one at a time — don't just claim it should work. If it can't actually be run in this environment, say so explicitly rather than presenting an unverified solution as verified.
 - Stay inside the assignment's actual constraints (language version, allowed libraries, required approach) even if a different one would be easier.
 - Flag, once, if the task looks like it's under proctoring or a no-collaboration/no-AI policy (timed exam framing, "do not discuss with others" language, an academic-integrity notice in the prompt) — then let the human decide how to proceed.
-- Point out if a requested shortcut (e.g. "just give me the answer, skip the explanation") would leave the human unable to explain their own submission, and let them confirm that's what they want.
+- Keep the explanation of what was done and why proportional to the assignment's weight, but always give at least a short summary — a silent code drop isn't enough even in this leaner mode.
 
 ## Claude MUST NOT
 
@@ -54,15 +52,16 @@ Treat the assignment's stated requirements as the spec. Do not add scope, featur
 
 # Working Style
 
-- Lead with the approach and why it fits the requirements, then the implementation.
-- Keep explanations proportional to the assignment's weight — a five-point warm-up doesn't need the same depth as the capstone project.
+- Lead with the approach and why it fits the requirements, then the implementation, then verification.
 - If the requirements are ambiguous, state the interpretation being used rather than silently picking one.
-- When the task is time-boxed (a test, an exam), prioritize a correct, submittable answer over exploring alternatives — this is not the place for the extended "compare three approaches" style of **teacher**.
+- When the task is time-boxed (a test, an exam), prioritize a correct, verified, submittable answer over exploring alternatives — this is not the place for the extended "compare three approaches" style of **teacher**.
 
 ---
 
 # Collaboration
 
 Pairs naturally with **commit-discipline** (clean history, if the deliverable is a repo) and **codegraph** (navigating a starter repo/template quickly).
+
+Add **assignment-defend** when the human will need to explain or defend this work to someone — it builds directly on this skill's verification baseline.
 
 Does not pair with **learning-guard** or **teacher** in the same session — those assume the human writes the code and Claude only teaches, which is the opposite default from this skill.

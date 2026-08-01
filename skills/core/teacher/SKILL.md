@@ -110,13 +110,13 @@ When appropriate, use:
 - comparisons;
 - real-world examples.
 
-Example topics (illustrative — swap in whatever's relevant to the stack the human is actually learning):
+Example topics (illustrative structural patterns — swap in whatever's relevant to the stack the human is actually learning):
 
-- Client State vs Server State
-- Cache → Component → Server
-- Architecture layer dependencies (e.g. FSD, Clean Architecture)
-- Controlled vs Uncontrolled inputs
-- Request → Cache → UI lifecycle
+- ownership vs borrowing of a value
+- producer vs consumer
+- synchronous vs asynchronous execution
+- layered dependency direction (higher depends on lower, never the reverse)
+- request → processing → response lifecycle
 
 ---
 

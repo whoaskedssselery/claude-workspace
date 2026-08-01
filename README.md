@@ -32,11 +32,37 @@ pick the preset that matches *how* you're working, then bolt on the actual techn
 
 | Preset | Core behavior | For |
 |---|---|---|
-| `learning` | [learning-guard](skills/core/learning-guard/SKILL.md), [teacher](skills/core/teacher/SKILL.md), [health-review](skills/core/health-review/SKILL.md), [commit-discipline](skills/core/commit-discipline/SKILL.md), [codegraph](skills/core/codegraph/SKILL.md) | Learning any technology. The human writes all application code; Claude teaches, reviews, and designs. Technology-agnostic — tell Claude what you're learning, it doesn't need a dedicated preset per stack. |
-| `project` | health-review, commit-discipline, codegraph | Day-to-day work on an existing/production project. No learning restrictions — Claude writes code normally. |
-| `assignment` | [assignment-mode](skills/core/assignment-mode/SKILL.md), commit-discipline, codegraph | University coursework, take-home tests, graded exercises. Claude may write the solution directly, but explains its reasoning and stays inside the stated requirements — see the skill for the academic-integrity framing. |
+| `learning` | [learning-guard](skills/core/learning-guard/SKILL.md), [teacher](skills/core/teacher/SKILL.md), [health-review](skills/core/health-review/SKILL.md), [commit-discipline](skills/core/commit-discipline/SKILL.md), [codegraph](skills/core/codegraph/SKILL.md) | Learning any technology. The human writes all application code; Claude teaches, reviews, and designs. These core skills describe pure teaching/review *patterns* and don't name a single technology anywhere — tell Claude what you're actually learning, and add it with `--with=` (see below). |
+| `project` | health-review, commit-discipline, codegraph | Day-to-day work on an existing/production project. No learning restrictions — Claude writes code normally. Add `--with=spike` for a specific piece of throwaway/exploratory work — see [Format variants](#format-variants). |
+| `assignment` | [assignment-mode](skills/core/assignment-mode/SKILL.md), commit-discipline, codegraph | University coursework, take-home tests, graded exercises. Claude may write the solution directly, verifies it actually works, and stays inside the stated requirements. Add `--with=assignment-defend` if the grader will ask the human to explain the work — see [Format variants](#format-variants). |
 | `redesign` | health-review, commit-discipline, codegraph | Projects that need visual work, not a learning exercise — drops learning-guard/teacher. Skills: [claude-design](skills/design/claude-design/SKILL.md), [react-best-practices](skills/frontend/react-best-practices/SKILL.md); external: `taste`, `ui-ux-pro-max`, `impeccable`. |
 | `oss-contribution` | commit-discipline, codegraph | Contributing to someone else's repository — minimal, convention-following diffs. |
+
+## Format variants
+
+Some presets have two genuinely different behaviors depending on circumstances outside the code
+itself — not a technology choice, a *how strict/how much explanation* choice. These live in
+`skills/formats/` and attach the same way a tech skill does, via `--with=`:
+
+- **Assignment: submit vs. defend.** Some graders only run the code and check the output; others
+  question the submission or require an oral defense. `assignment` already verifies the solution
+  works either way — add [`assignment-defend`](skills/formats/assignment-defend/SKILL.md) when the
+  human will actually have to explain or defend it: it adds a short defense sheet, an offer to quiz
+  the human on the material, and a deeper walkthrough on request.
+
+  ```bash
+  npx claude-workspace init assignment . --with=assignment-defend
+  ```
+
+- **Project: spike vs. production.** Sometimes you just want to know if an idea works; sometimes
+  you're shipping. `project`'s defaults (health-review, commit-discipline) assume the latter. Add
+  [`spike`](skills/formats/spike/SKILL.md) when you explicitly want to move fast and throw the code
+  away — it relaxes those defaults for that specific piece of work and flags clearly before spike
+  code gets treated as production-ready.
+
+  ```bash
+  npx claude-workspace init project . --with=spike
+  ```
 
 ## Skill catalog
 
@@ -50,20 +76,24 @@ pick the preset that matches *how* you're working, then bolt on the actual techn
 - **`skills/backend/`** — [api-designer](skills/backend/api-designer/SKILL.md) and
   [security-reviewer](skills/backend/security-reviewer/SKILL.md), vendored from
   [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) (MIT).
+- **`skills/formats/`** — original, not vendored: [assignment-defend](skills/formats/assignment-defend/SKILL.md)
+  and [spike](skills/formats/spike/SKILL.md), optional behavioral variants (see
+  [Format variants](#format-variants)).
 
 Everything above is a static, portable `SKILL.md` (+ optional reference files) with no installer of
 its own, so `init` copies it directly whenever it's requested — no flag needed for domain skills.
 
-## Picking a technology: `--with=`
+## `--with=`: technologies and format variants
 
 Presets don't hardcode a stack, so this is how you tell `init` what you actually want on top of the
-preset's core behavior. `--with=` accepts **any** known skill name — domain skills and external
-tools alike — comma-separated, and works for more than one at a time:
+preset's core behavior. `--with=` accepts **any** known skill name — domain skills, format variants
+and external tools alike — comma-separated, and works for more than one at a time:
 
 ```bash
 npx claude-workspace init learning . --with=react-best-practices
 npx claude-workspace init learning . --with=api-designer,security-reviewer
 npx claude-workspace init redesign . --with=taste,claude-design
+npx claude-workspace init assignment . --with=assignment-defend
 ```
 
 It isn't limited to what the chosen preset already lists — `learning` ships with an empty skill

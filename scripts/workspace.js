@@ -64,8 +64,11 @@ const EXTERNAL_TOOLS = {
 /**
  * Domain folders that hold vendored, portable skills (as opposed to
  * skills/core, which is copied into every preset regardless of domain).
+ * `formats` holds optional behavioral variants (assignment-defend, spike)
+ * that attach to a preset's baseline behavior via --with=, the same way a
+ * tech skill does.
  */
-const DOMAIN_DIRS = ['frontend', 'design', 'backend'];
+const DOMAIN_DIRS = ['frontend', 'design', 'backend', 'formats'];
 
 /**
  * Runs an external tool's own installer as a child process. Falls back to

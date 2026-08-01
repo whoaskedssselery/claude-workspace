@@ -113,7 +113,7 @@ If the language has a type system, review:
 - unnecessary assertions;
 - missing narrowing;
 - type inference opportunities;
-- validation at boundaries where appropriate (Zod, Pydantic, io-ts, etc.).
+- validation at boundaries where appropriate.
 
 Assume strict use of the type system.
 
@@ -121,7 +121,7 @@ Assume strict use of the type system.
 
 ## 4. Architecture
 
-Review, in terms of whatever architectural pattern the project actually follows (Feature-Sliced Design, Clean Architecture, MVC, hexagonal, or a bespoke convention):
+Review, in terms of whatever architectural pattern the project actually follows:
 
 - layer/module boundaries;
 - dependency direction;
@@ -144,8 +144,8 @@ Review boundaries between:
 
 Evaluate, in terms of whatever the project's actual data-fetching and state libraries are:
 
-- data-fetching/caching layer usage (e.g. React Query, SWR, RTK Query);
-- global client-state store usage (e.g. Zustand, Redux, Pinia);
+- data-fetching/caching layer usage;
+- global client-state store usage;
 - query invalidation;
 - query keys;
 - unnecessary global state;

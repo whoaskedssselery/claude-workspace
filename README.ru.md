@@ -32,11 +32,38 @@ React или бэкенду — выбираете пресет под то, *к
 
 | Пресет | Core-поведение | Для чего |
 |---|---|---|
-| `learning` | [learning-guard](skills/core/learning-guard/SKILL.md), [teacher](skills/core/teacher/SKILL.md), [health-review](skills/core/health-review/SKILL.md), [commit-discipline](skills/core/commit-discipline/SKILL.md), [codegraph](skills/core/codegraph/SKILL.md) | Обучение любой технологии. Весь код пишет человек; Claude учит, ревьюит, помогает с дизайном. Технологически нейтрален — просто скажите Claude, что вы изучаете, отдельный пресет под каждый стек не нужен. |
-| `project` | health-review, commit-discipline, codegraph | Повседневная работа над существующим/боевым проектом. Без учебных ограничений — Claude пишет код как обычно. |
-| `assignment` | [assignment-mode](skills/core/assignment-mode/SKILL.md), commit-discipline, codegraph | Учебные задания в вузе, тестовые задания, оцениваемые упражнения. Claude может писать решение напрямую, но объясняет ход мысли и не выходит за рамки условия — детали академической честности см. в самом скилле. |
+| `learning` | [learning-guard](skills/core/learning-guard/SKILL.md), [teacher](skills/core/teacher/SKILL.md), [health-review](skills/core/health-review/SKILL.md), [commit-discipline](skills/core/commit-discipline/SKILL.md), [codegraph](skills/core/codegraph/SKILL.md) | Обучение любой технологии. Весь код пишет человек; Claude учит, ревьюит, помогает с дизайном. Эти core-скиллы описывают только паттерны преподавания/ревью и нигде не называют конкретную технологию — скажите Claude, что реально изучаете, и добавьте это через `--with=` (см. ниже). |
+| `project` | health-review, commit-discipline, codegraph | Повседневная работа над существующим/боевым проектом. Без учебных ограничений — Claude пишет код как обычно. Добавьте `--with=spike` для конкретного куска одноразовой/исследовательской работы — см. [Варианты формата](#варианты-формата). |
+| `assignment` | [assignment-mode](skills/core/assignment-mode/SKILL.md), commit-discipline, codegraph | Учебные задания в вузе, тестовые задания, оцениваемые упражнения. Claude может писать решение напрямую, проверяет, что оно реально работает, и не выходит за рамки условия. Добавьте `--with=assignment-defend`, если преподаватель будет требовать объяснений — см. [Варианты формата](#варианты-формата). |
 | `redesign` | health-review, commit-discipline, codegraph | Проекты, где нужна визуальная работа, а не обучение — без learning-guard/teacher. Скиллы: [claude-design](skills/design/claude-design/SKILL.md), [react-best-practices](skills/frontend/react-best-practices/SKILL.md); external: `taste`, `ui-ux-pro-max`, `impeccable`. |
 | `oss-contribution` | commit-discipline, codegraph | Вклад в чужой репозиторий — минимальные диффы, следование существующим конвенциям. |
+
+## Варианты формата
+
+У некоторых пресетов есть два реально разных поведения в зависимости от обстоятельств вне самого
+кода — это выбор не технологии, а *насколько строго/сколько объяснений нужно*. Они лежат в
+`skills/formats/` и подключаются так же, как технологический скилл — через `--with=`:
+
+- **Задание: сдать vs объяснить.** Одни преподаватели просто запускают код и проверяют результат;
+  другие расспрашивают про решение или требуют устной защиты. `assignment` уже проверяет, что
+  решение работает в любом случае — добавьте
+  [`assignment-defend`](skills/formats/assignment-defend/SKILL.md), когда придётся реально
+  объяснять или защищать работу: это добавляет короткий "лист защиты" (вероятные вопросы + ответы),
+  предложение опросить вас по материалу и более глубокий разбор кода по запросу.
+
+  ```bash
+  npx claude-workspace init assignment . --with=assignment-defend
+  ```
+
+- **Проект: набросок vs продакшн.** Иногда нужно просто понять, работает ли идея; иногда — реально
+  катить в продакшн. Дефолты `project` (health-review, commit-discipline) рассчитаны на второе.
+  Добавьте [`spike`](skills/formats/spike/SKILL.md), когда осознанно хотите двигаться быстро и
+  выбросить код потом — он ослабляет эти дефолты именно для этого куска работы и явно предупреждает
+  перед тем, как черновой код начнут воспринимать как готовый к продакшну.
+
+  ```bash
+  npx claude-workspace init project . --with=spike
+  ```
 
 ## Каталог скиллов
 
@@ -51,21 +78,27 @@ React или бэкенду — выбираете пресет под то, *к
 - **`skills/backend/`** — [api-designer](skills/backend/api-designer/SKILL.md) и
   [security-reviewer](skills/backend/security-reviewer/SKILL.md), завендорено из
   [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) (MIT).
+- **`skills/formats/`** — оригинальные, не завендоренные:
+  [assignment-defend](skills/formats/assignment-defend/SKILL.md) и
+  [spike](skills/formats/spike/SKILL.md), опциональные поведенческие варианты (см.
+  [Варианты формата](#варианты-формата)).
 
 Всё перечисленное — статичный, портативный `SKILL.md` (+ опциональные reference-файлы) без
 собственного установщика, так что `init` копирует его напрямую по первому запросу — флаг для
 доменных скиллов не нужен.
 
-## Выбор технологии: `--with=`
+## `--with=`: технологии и варианты формата
 
 Пресеты не зашивают стек жёстко, поэтому именно так вы говорите `init`, что реально нужно поверх
-базового поведения пресета. `--with=` принимает **любое** известное имя скилла — доменные скиллы и
-внешние инструменты одинаково — через запятую, и работает сразу для нескольких штук:
+базового поведения пресета. `--with=` принимает **любое** известное имя скилла — доменные скиллы,
+варианты формата и внешние инструменты одинаково — через запятую, и работает сразу для нескольких
+штук:
 
 ```bash
 npx claude-workspace init learning . --with=react-best-practices
 npx claude-workspace init learning . --with=api-designer,security-reviewer
 npx claude-workspace init redesign . --with=taste,claude-design
+npx claude-workspace init assignment . --with=assignment-defend
 ```
 
 Флаг не ограничен тем, что уже перечислено в выбранном пресете — `learning` специально поставляется

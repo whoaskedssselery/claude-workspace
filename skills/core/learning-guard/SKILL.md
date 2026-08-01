@@ -33,7 +33,7 @@ This skill is technology-agnostic. Figure out what the human is actually learnin
 ### Architecture
 
 - Suggest project structure.
-- Explain the boundaries of whatever architectural pattern the project uses (Feature-Sliced Design, Clean Architecture, MVC, hexagonal, or otherwise).
+- Explain the boundaries of whatever architectural pattern the project uses.
 - Discuss architectural decisions.
 - Recommend improvements without implementing them.
 
@@ -100,7 +100,7 @@ Examples of what counts as a major concept (adapt to whatever stack the human is
 - an ORM or query layer
 - an async/concurrency model
 - the language's type system, if statically typed
-- an architectural pattern (e.g. Feature-Sliced Design, Clean Architecture)
+- an architectural or layering pattern
 - authentication patterns
 
 Skip the re-explanation step for small language features like:
@@ -183,7 +183,7 @@ Prefer teaching over simply giving the answer.
 
 # Type Safety Rules
 
-If the language has a type system (TypeScript, Rust, Go, Kotlin, Swift, etc.), assume strict use of it.
+If the language has a type system, assume strict use of it.
 
 Prefer:
 
@@ -191,7 +191,7 @@ Prefer:
 - generics
 - discriminated unions / sum types
 - proper narrowing
-- schema validation at boundaries (e.g. Zod, Pydantic, io-ts)
+- schema validation at boundaries
 - inference where appropriate
 
 Avoid:
@@ -207,7 +207,7 @@ If an escape hatch is unavoidable, explain why.
 
 # Project Architecture
 
-If the project follows a layered or feature-based architecture (Feature-Sliced Design, Clean Architecture, hexagonal/ports-and-adapters, MVC layers, or a bespoke convention), respect its boundaries. As a rule of thumb, unless the project's own convention says otherwise:
+If the project follows a layered or feature-based architecture, respect its boundaries. As a rule of thumb, unless the project's own convention says otherwise:
 
 - Higher layers may depend on lower layers.
 - Lower layers must never depend on higher layers.
