@@ -138,9 +138,13 @@ npx claude-workspace init project . --with=feature-forge
 ## Использование
 
 ```bash
+npx claude-workspace list
 npx claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,name,...>]
 npx claude-workspace sync [targetDir]
 ```
+
+`list` печатает все пресеты, скиллы и внешние инструменты, о которых знает пакет, с однострочным
+описанием каждого — каталог разросся настолько, что проще посмотреть это, чем читать репозиторий.
 
 `sync` заново копирует то, что перечислено в `.claude/workspace.yaml`, из текущей установленной
 версии пакета `claude-workspace` — используйте после обновления пакета, чтобы подтянуть изменения

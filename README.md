@@ -133,9 +133,13 @@ it prints the manual command instead and keeps going.
 ## Usage
 
 ```bash
+npx claude-workspace list
 npx claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,name,...>]
 npx claude-workspace sync [targetDir]
 ```
+
+`list` prints every preset, skill and external tool this package knows about with a one-line
+description each — the catalog's grown enough that it's easier to check this than to read the repo.
 
 `sync` re-copies whatever `.claude/workspace.yaml` declares from the currently installed
 `claude-workspace` package — use it after upgrading the package to pick up skill content updates

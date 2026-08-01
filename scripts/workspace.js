@@ -369,6 +369,81 @@ async function sync(targetDir) {
 	console.log('');
 }
 
+/**
+ * Pulls the `description:` field out of a SKILL.md's YAML frontmatter,
+ * handling both `description: text` and the folded block style
+ * (`description: >-` followed by indented continuation lines) that the
+ * vendored skills use. No YAML dependency — just enough to display a
+ * one-line summary in `list`.
+ */
+function extractDescription(skillMd) {
+	const lines = skillMd.split(/\r?\n/);
+	if (lines[0]?.trim() !== '---') return '';
+	const end = lines.indexOf('---', 1);
+	const frontmatter = lines.slice(1, end === -1 ? undefined : end);
+
+	const startIdx = frontmatter.findIndex((line) => /^description:/.test(line));
+	if (startIdx === -1) return '';
+
+	const firstLine = frontmatter[startIdx].replace(/^description:\s*/, '').trim();
+	if (firstLine && firstLine !== '>-' && firstLine !== '|' && firstLine !== '>') {
+		return firstLine.replace(/^["']|["']$/g, '');
+	}
+
+	const continuation = [];
+	for (let i = startIdx + 1; i < frontmatter.length; i++) {
+		if (!/^\s/.test(frontmatter[i])) break;
+		continuation.push(frontmatter[i].trim());
+	}
+	return continuation.join(' ');
+}
+
+function truncate(text, max = 100) {
+	return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}
+
+async function describeSkill(kind, name) {
+	const file = path.join(SKILLS_DIR, kind, name, 'SKILL.md');
+	if (!existsSync(file)) return '';
+	return truncate(extractDescription(await fs.readFile(file, 'utf8')));
+}
+
+async function list() {
+	const presetFiles = (await fs.readdir(PRESETS_DIR)).filter((f) => f.endsWith('.yaml'));
+
+	console.log('\nPresets (claude-workspace init <preset>):\n');
+	for (const file of presetFiles.sort()) {
+		const preset = parseSimpleYaml(await fs.readFile(path.join(PRESETS_DIR, file), 'utf8'));
+		const name = file.replace(/\.yaml$/, '');
+		const parts = [`core: ${(preset.core ?? []).join(', ') || '(none)'}`];
+		if (preset.skills?.length) parts.push(`skills: ${preset.skills.join(', ')}`);
+		console.log(`  ${name.padEnd(18)} ${parts.join('  |  ')}`);
+	}
+
+	console.log('\nCore skills (installed only via a preset\'s own core: list):\n');
+	for (const name of (await fs.readdir(path.join(SKILLS_DIR, 'core'))).sort()) {
+		console.log(`  ${name.padEnd(20)} ${await describeSkill('core', name)}`);
+	}
+
+	console.log('\nAttachable skills (add with --with=<name>, from any preset):\n');
+	for (const kind of DOMAIN_DIRS) {
+		const dir = path.join(SKILLS_DIR, kind);
+		if (!existsSync(dir)) continue;
+		const names = (await fs.readdir(dir)).sort();
+		if (!names.length) continue;
+		console.log(`  ${kind}/`);
+		for (const name of names) {
+			console.log(`    ${name.padEnd(22)} ${await describeSkill(kind, name)}`);
+		}
+	}
+
+	console.log('\nExternal tools (own installer — need --with=<name> or --with-external to actually install):\n');
+	for (const [name, tool] of Object.entries(EXTERNAL_TOOLS)) {
+		console.log(`  ${name.padEnd(18)} ${tool.url}`);
+	}
+	console.log('');
+}
+
 const COMING_SOON = new Set(['update', 'doctor', 'add', 'remove']);
 
 function printHelp() {
@@ -376,10 +451,14 @@ function printHelp() {
 claude-workspace — prepare a project for Claude Code in one command
 
 Usage:
+  claude-workspace list
   claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,name,...>]
   claude-workspace sync [targetDir]
 
 Commands:
+  list            Show every preset, skill and external tool this package
+                  knows about, with a one-line description each.
+
   init <preset>   Install a preset's skills, workspace manifest and CLAUDE.md
                   (targetDir defaults to the current directory).
 
@@ -412,6 +491,11 @@ async function main() {
 
 	if (!command || command === '--help' || command === '-h') {
 		printHelp();
+		return;
+	}
+
+	if (command === 'list') {
+		await list();
 		return;
 	}
 
