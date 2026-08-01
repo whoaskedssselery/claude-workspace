@@ -6,7 +6,6 @@ core:
   - codegraph
 
 skills:
-  - claude-design
   - react-best-practices
   - taste
   - ui-ux-pro-max
