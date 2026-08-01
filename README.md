@@ -165,8 +165,8 @@ implemented yet.
 
 ## Local development
 
-This package isn't published to npm yet, so `npx claude-workspace init ...` won't resolve anywhere
-until it is. To try it against a real project before publishing:
+Published on npm, so `npx claude-workspace init <preset>` (as in the Quick start above) works
+against the latest published version. To try an unreleased local change before publishing it:
 
 ```bash
 npm pack                        # produces claude-workspace-<version>.tgz
