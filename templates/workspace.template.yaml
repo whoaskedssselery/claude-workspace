@@ -1,0 +1,12 @@
+version: 1
+
+preset: {{PRESET}}
+
+core:
+{{CORE_LIST}}
+
+skills:
+{{SKILLS_LIST}}
+
+external:
+{{EXTERNAL_LIST}}

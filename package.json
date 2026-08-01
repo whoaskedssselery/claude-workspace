@@ -1,0 +1,26 @@
+{
+	"name": "claude-workspace",
+	"version": "0.1.0",
+	"description": "Opinionated workspace manager for Claude Code. Installs a preset of skills, a workspace manifest and a CLAUDE.md into any project with one command.",
+	"keywords": [
+		"claude",
+		"claude-code",
+		"skills",
+		"cli"
+	],
+	"license": "MIT",
+	"private": false,
+	"type": "module",
+	"engines": {
+		"node": ">=18"
+	},
+	"bin": {
+		"claude-workspace": "./scripts/workspace.js"
+	},
+	"files": [
+		"scripts",
+		"skills",
+		"presets",
+		"templates"
+	]
+}
