@@ -1,6 +1,6 @@
 {
 	"name": "claude-workspace",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "Opinionated workspace manager for Claude Code. Installs a preset of skills, a workspace manifest and a CLAUDE.md into any project with one command.",
 	"keywords": [
 		"claude",
@@ -10,6 +10,14 @@
 	],
 	"license": "MIT",
 	"private": false,
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/whoaskedssselery/claude-workspace.git"
+	},
+	"homepage": "https://github.com/whoaskedssselery/claude-workspace#readme",
+	"bugs": {
+		"url": "https://github.com/whoaskedssselery/claude-workspace/issues"
+	},
 	"type": "module",
 	"engines": {
 		"node": ">=18"
