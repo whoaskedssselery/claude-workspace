@@ -68,7 +68,53 @@ const EXTERNAL_TOOLS = {
  * that attach to a preset's baseline behavior via --with=, the same way a
  * tech skill does.
  */
-const DOMAIN_DIRS = ['frontend', 'design', 'backend', 'formats'];
+const DOMAIN_DIRS = ['frontend', 'design', 'backend', 'planning', 'formats'];
+
+/**
+ * Every skill/tool name init or sync can resolve, across all domains plus
+ * external tools — used to validate --with= and suggest a fix for typos.
+ */
+async function listKnownNames() {
+	const names = [];
+	for (const kind of DOMAIN_DIRS) {
+		const dir = path.join(SKILLS_DIR, kind);
+		if (!existsSync(dir)) continue;
+		for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+			if (entry.isDirectory()) names.push(entry.name);
+		}
+	}
+	names.push(...Object.keys(EXTERNAL_TOOLS));
+	return names;
+}
+
+/** Levenshtein edit distance, for suggesting a fix when --with= has a typo. */
+function editDistance(a, b) {
+	const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+	for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+	for (let i = 1; i <= a.length; i++) {
+		for (let j = 1; j <= b.length; j++) {
+			dp[i][j] =
+				a[i - 1] === b[j - 1]
+					? dp[i - 1][j - 1]
+					: 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
+		}
+	}
+	return dp[a.length][b.length];
+}
+
+function suggestName(name, knownNames) {
+	let best = null;
+	let bestDistance = Infinity;
+	for (const candidate of knownNames) {
+		const distance = editDistance(name, candidate);
+		if (distance < bestDistance) {
+			bestDistance = distance;
+			best = candidate;
+		}
+	}
+	// Only suggest when the typo is plausibly small relative to the name's length.
+	return best && bestDistance <= Math.max(2, Math.ceil(name.length / 3)) ? best : null;
+}
 
 /**
  * Runs an external tool's own installer as a child process. Falls back to
@@ -236,8 +282,15 @@ async function init(presetName, targetDir, { withExternal = false, withNames = n
 			continue;
 		}
 		const ok = await copyDomainSkill(name, skillsDestDir);
-		if (ok) installedSkills.push(name);
-		else warn(`"${name}" isn't a known skill or external tool — skipped`);
+		if (ok) {
+			installedSkills.push(name);
+			continue;
+		}
+		const suggestion = suggestName(name, await listKnownNames());
+		warn(
+			`"${name}" isn't a known skill or external tool — skipped` +
+				(suggestion ? ` (did you mean "${suggestion}"?)` : '')
+		);
 	}
 
 	const workspaceTemplate = await fs.readFile(
@@ -276,7 +329,47 @@ async function init(presetName, targetDir, { withExternal = false, withNames = n
 	console.log(`  .gitignore  (.claude/settings.local.json, .DS_Store)\n`);
 }
 
-const COMING_SOON = new Set(['sync', 'update', 'doctor', 'add', 'remove']);
+/**
+ * Re-copies whatever skills/core+skills/workspace.yaml declares from the
+ * currently installed claude-workspace package — picks up skill content
+ * updates without re-running init. Doesn't touch CLAUDE.md (may have been
+ * hand-edited) or re-run external tools' installers (those update
+ * themselves; see each tool's own update command).
+ */
+async function sync(targetDir) {
+	const workspacePath = path.join(targetDir, '.claude', 'workspace.yaml');
+	if (!existsSync(workspacePath)) {
+		throw new Error(`No .claude/workspace.yaml found in ${targetDir} — run "init" first.`);
+	}
+	const manifest = parseSimpleYaml(await fs.readFile(workspacePath, 'utf8'));
+	const skillsDestDir = path.join(targetDir, '.claude', 'skills');
+	await fs.mkdir(skillsDestDir, { recursive: true });
+
+	console.log(`\nSyncing skills declared in ${workspacePath}\n`);
+
+	let updated = 0;
+	for (const name of manifest.core ?? []) {
+		if (await copySkill('core', name, skillsDestDir)) updated++;
+		else warn(`core skill "${name}" not found in ${SKILLS_DIR}/core — skipped`);
+	}
+	for (const name of manifest.skills ?? []) {
+		if (await copyDomainSkill(name, skillsDestDir)) updated++;
+		else warn(`"${name}" isn't a known skill — skipped (external tools aren't refreshed by sync)`);
+	}
+
+	await ensureGitignore(targetDir);
+
+	console.log(`\nDone. Refreshed ${updated} skill(s).`);
+	const external = manifest.external ?? [];
+	console.log(
+		external.length
+			? `External tools (${external.join(', ')}) were not touched — update each with its own CLI.`
+			: `No external tools recorded — nothing else to update.`
+	);
+	console.log('');
+}
+
+const COMING_SOON = new Set(['update', 'doctor', 'add', 'remove']);
 
 function printHelp() {
 	console.log(`
@@ -284,6 +377,7 @@ claude-workspace — prepare a project for Claude Code in one command
 
 Usage:
   claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,name,...>]
+  claude-workspace sync [targetDir]
 
 Commands:
   init <preset>   Install a preset's skills, workspace manifest and CLAUDE.md
@@ -302,6 +396,11 @@ Commands:
                   — only their install command is printed. --with-external
                   installs all of them; --with=<name> installs just that one
                   (works for external tools too, not only domain skills).
+
+  sync            Re-copy the skills declared in .claude/workspace.yaml from
+                  the currently installed claude-workspace package (picks up
+                  skill content updates). Doesn't touch CLAUDE.md or
+                  re-install external tools.
 
 Coming soon:
   ${[...COMING_SOON].join(', ')}
@@ -334,6 +433,12 @@ async function main() {
 			return;
 		}
 		await init(presetName, path.resolve(targetDir), { withExternal, withNames });
+		return;
+	}
+
+	if (command === 'sync') {
+		const [targetDir = process.cwd()] = args.filter((arg) => !arg.startsWith('--'));
+		await sync(path.resolve(targetDir));
 		return;
 	}
 

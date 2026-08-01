@@ -75,9 +75,15 @@ React или бэкенду — выбираете пресет под то, *к
   завендорено из [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) (MIT).
 - **`skills/design/`** — [claude-design](skills/design/claude-design/SKILL.md), завендорено из
   [jiji262/claude-design-skill](https://github.com/jiji262/claude-design-skill) (MIT).
-- **`skills/backend/`** — [api-designer](skills/backend/api-designer/SKILL.md) и
-  [security-reviewer](skills/backend/security-reviewer/SKILL.md), завендорено из
+- **`skills/backend/`** — [api-designer](skills/backend/api-designer/SKILL.md),
+  [security-reviewer](skills/backend/security-reviewer/SKILL.md) и
+  [database-optimizer](skills/backend/database-optimizer/SKILL.md), завендорено из
   [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) (MIT).
+- **`skills/planning/`** — [feature-forge](skills/planning/feature-forge/SKILL.md), тоже из
+  [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) (MIT): структурированные
+  воркшопы по требованиям — user stories, требования в формате EARS, критерии приёмки, чеклисты
+  реализации. По умолчанию не встроен ни в один пресет — добавляйте `--with=feature-forge`, где
+  нужен этап планирования перед разработкой.
 - **`skills/formats/`** — оригинальные, не завендоренные:
   [assignment-defend](skills/formats/assignment-defend/SKILL.md) и
   [spike](skills/formats/spike/SKILL.md), опциональные поведенческие варианты (см.
@@ -96,13 +102,20 @@ React или бэкенду — выбираете пресет под то, *к
 
 ```bash
 npx claude-workspace init learning . --with=react-best-practices
-npx claude-workspace init learning . --with=api-designer,security-reviewer
+npx claude-workspace init learning . --with=api-designer,security-reviewer,database-optimizer
 npx claude-workspace init redesign . --with=taste,claude-design
 npx claude-workspace init assignment . --with=assignment-defend
+npx claude-workspace init project . --with=feature-forge
 ```
 
 Флаг не ограничен тем, что уже перечислено в выбранном пресете — `learning` специально поставляется
 с пустым списком скиллов, чтобы именно `--with=` решал, какой стек вы изучаете.
+
+Опечатка в имени не проходит молча — `init`/`sync` предлагают ближайшее известное совпадение:
+
+```
+! "databse-optimizer" isn't a known skill or external tool — skipped (did you mean "database-optimizer"?)
+```
 
 ## Внешние инструменты
 
@@ -126,11 +139,18 @@ npx claude-workspace init assignment . --with=assignment-defend
 
 ```bash
 npx claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,name,...>]
+npx claude-workspace sync [targetDir]
 ```
+
+`sync` заново копирует то, что перечислено в `.claude/workspace.yaml`, из текущей установленной
+версии пакета `claude-workspace` — используйте после обновления пакета, чтобы подтянуть изменения
+содержимого скиллов без повторного `init`. `CLAUDE.md` не трогается, установщики внешних
+инструментов не перезапускаются (обновляйте их своим CLI, например `codegraph upgrade`,
+`uipro update`).
 
 ## Roadmap
 
-`sync`, `update`, `doctor`, `add` и `remove` — заглушки в CLI (`claude-workspace <command>`), пока не
+`update`, `doctor`, `add` и `remove` — заглушки в CLI (`claude-workspace <command>`), пока не
 реализованы.
 
 ## Локальная разработка

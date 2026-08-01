@@ -73,9 +73,15 @@ itself — not a technology choice, a *how strict/how much explanation* choice. 
   vendored from [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) (MIT).
 - **`skills/design/`** — [claude-design](skills/design/claude-design/SKILL.md), vendored from
   [jiji262/claude-design-skill](https://github.com/jiji262/claude-design-skill) (MIT).
-- **`skills/backend/`** — [api-designer](skills/backend/api-designer/SKILL.md) and
-  [security-reviewer](skills/backend/security-reviewer/SKILL.md), vendored from
+- **`skills/backend/`** — [api-designer](skills/backend/api-designer/SKILL.md),
+  [security-reviewer](skills/backend/security-reviewer/SKILL.md) and
+  [database-optimizer](skills/backend/database-optimizer/SKILL.md), vendored from
   [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) (MIT).
+- **`skills/planning/`** — [feature-forge](skills/planning/feature-forge/SKILL.md), also from
+  [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) (MIT): structured
+  requirements workshops — user stories, EARS-format requirements, acceptance criteria,
+  implementation checklists. Not bundled into any preset by default; add it with `--with=feature-forge`
+  wherever you want a planning pass before building.
 - **`skills/formats/`** — original, not vendored: [assignment-defend](skills/formats/assignment-defend/SKILL.md)
   and [spike](skills/formats/spike/SKILL.md), optional behavioral variants (see
   [Format variants](#format-variants)).
@@ -91,13 +97,20 @@ and external tools alike — comma-separated, and works for more than one at a t
 
 ```bash
 npx claude-workspace init learning . --with=react-best-practices
-npx claude-workspace init learning . --with=api-designer,security-reviewer
+npx claude-workspace init learning . --with=api-designer,security-reviewer,database-optimizer
 npx claude-workspace init redesign . --with=taste,claude-design
 npx claude-workspace init assignment . --with=assignment-defend
+npx claude-workspace init project . --with=feature-forge
 ```
 
 It isn't limited to what the chosen preset already lists — `learning` ships with an empty skill
 list precisely so `--with=` is the only thing that decides which stack you're learning.
+
+A misspelled name doesn't fail silently — `init`/`sync` suggest the closest known match:
+
+```
+! "databse-optimizer" isn't a known skill or external tool — skipped (did you mean "database-optimizer"?)
+```
 
 ## External tools
 
@@ -121,12 +134,18 @@ it prints the manual command instead and keeps going.
 
 ```bash
 npx claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,name,...>]
+npx claude-workspace sync [targetDir]
 ```
+
+`sync` re-copies whatever `.claude/workspace.yaml` declares from the currently installed
+`claude-workspace` package — use it after upgrading the package to pick up skill content updates
+without re-running `init`. It leaves `CLAUDE.md` alone and doesn't re-run external tools' installers
+(update those with their own CLI, e.g. `codegraph upgrade`, `uipro update`).
 
 ## Roadmap
 
-`sync`, `update`, `doctor`, `add` and `remove` are stubbed in the CLI (`claude-workspace <command>`)
-but not implemented yet.
+`update`, `doctor`, `add` and `remove` are stubbed in the CLI (`claude-workspace <command>`) but not
+implemented yet.
 
 ## Local development
 
