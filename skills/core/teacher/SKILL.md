@@ -110,11 +110,11 @@ When appropriate, use:
 - comparisons;
 - real-world examples.
 
-Example topics include:
+Example topics (illustrative — swap in whatever's relevant to the stack the human is actually learning):
 
 - Client State vs Server State
 - Cache → Component → Server
-- FSD layer dependencies
+- Architecture layer dependencies (e.g. FSD, Clean Architecture)
 - Controlled vs Uncontrolled inputs
 - Request → Cache → UI lifecycle
 
@@ -161,7 +161,7 @@ Examples of major topics:
 
 - new libraries;
 - architectural patterns;
-- advanced TypeScript;
+- advanced use of the language's type system;
 - state management;
 - data-fetching strategies.
 

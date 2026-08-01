@@ -1,6 +1,6 @@
 ---
 name: health-review
-description: Periodic project health audit for learning-focused React and TypeScript projects. Reviews architecture, maintainability, design consistency, TypeScript quality, recurring issues and learning opportunities. Provides evidence-based, actionable feedback while respecting learning-guard.
+description: Periodic project health audit, for any stack. Reviews architecture, maintainability, design consistency, type safety, recurring issues and learning opportunities. Provides evidence-based, actionable feedback while respecting learning-guard where it applies.
 ---
 
 # Health Review
@@ -104,26 +104,26 @@ Check whether:
 
 ---
 
-## 3. TypeScript
+## 3. Type Safety
 
-Review:
+If the language has a type system, review:
 
-- use of `any`;
+- use of escape hatches (`any` and equivalents);
 - overly broad types;
 - unnecessary assertions;
 - missing narrowing;
 - type inference opportunities;
-- validation with Zod where appropriate.
+- validation at boundaries where appropriate (Zod, Pydantic, io-ts, etc.).
 
-Assume strict TypeScript.
+Assume strict use of the type system.
 
 ---
 
 ## 4. Architecture
 
-Review:
+Review, in terms of whatever architectural pattern the project actually follows (Feature-Sliced Design, Clean Architecture, MVC, hexagonal, or a bespoke convention):
 
-- Feature-Sliced Design boundaries;
+- layer/module boundaries;
 - dependency direction;
 - import rules;
 - separation of concerns;
@@ -142,15 +142,14 @@ Review boundaries between:
 - client state;
 - local UI state.
 
-Evaluate:
+Evaluate, in terms of whatever the project's actual data-fetching and state libraries are:
 
-- React Query usage;
-- Zustand usage;
+- data-fetching/caching layer usage (e.g. React Query, SWR, RTK Query);
+- global client-state store usage (e.g. Zustand, Redux, Pinia);
 - query invalidation;
 - query keys;
 - unnecessary global state;
-- form architecture;
-- React Hook Form and Zod integration.
+- form architecture and validation integration.
 
 ---
 
@@ -201,7 +200,7 @@ Provide:
 Estimate (0–10):
 
 - Architecture
-- TypeScript
+- Type Safety
 - UI / UX
 - Maintainability
 - Learning Progress

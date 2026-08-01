@@ -1,0 +1,8 @@
+name: assignment
+
+core:
+  - assignment-mode
+  - commit-discipline
+  - codegraph
+
+skills: []

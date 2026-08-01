@@ -1,4 +1,4 @@
-name: backend-learning
+name: learning
 
 core:
   - learning-guard
@@ -7,6 +7,4 @@ core:
   - commit-discipline
   - codegraph
 
-skills:
-  - api-designer
-  - security-reviewer
+skills: []

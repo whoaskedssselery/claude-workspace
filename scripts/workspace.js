@@ -211,9 +211,15 @@ async function init(presetName, targetDir, { withExternal = false, withNames = n
 		else warn(`core skill "${name}" not found in ${SKILLS_DIR}/core — skipped`);
 	}
 
+	// --with=<names> can name ANY known skill/tool, not just ones the preset
+	// already lists — that's how a generic preset like `learning` picks up a
+	// specific technology (e.g. --with=react-best-practices,api-designer) at
+	// init time instead of needing a dedicated preset per stack.
+	const requestedNames = [...new Set([...(preset.skills ?? []), ...(withNames ?? [])])];
+
 	const installedSkills = [];
 	const installedExternal = [];
-	for (const name of preset.skills ?? []) {
+	for (const name of requestedNames) {
 		const external = EXTERNAL_TOOLS[name];
 		if (external) {
 			const wanted = withExternal || (withNames?.includes(name) ?? false);
@@ -228,15 +234,7 @@ async function init(presetName, targetDir, { withExternal = false, withNames = n
 		}
 		const ok = await copyDomainSkill(name, skillsDestDir);
 		if (ok) installedSkills.push(name);
-		else warn(`skill "${name}" not found in any of skills/{${DOMAIN_DIRS.join(',')}} — skipped`);
-	}
-
-	if (withNames) {
-		for (const name of withNames) {
-			if (!(preset.skills ?? []).includes(name)) {
-				warn(`--with=${name} ignored: "${name}" isn't listed in this preset's skills`);
-			}
-		}
+		else warn(`"${name}" isn't a known skill or external tool — skipped`);
 	}
 
 	const workspaceTemplate = await fs.readFile(
@@ -287,11 +285,20 @@ Usage:
 Commands:
   init <preset>   Install a preset's skills, workspace manifest and CLAUDE.md
                   (targetDir defaults to the current directory).
-                  External tools the preset lists (e.g. Impeccable,
-                  Superpowers, Taste, UI UX Pro Max) are NOT installed by
-                  default — only their install command is printed.
-                    --with-external        install all of them
-                    --with=taste,impeccable  install only the ones named
+
+                  --with=<name,name,...>  also install these skills/tools,
+                    from ANY domain (skills/{frontend,design,backend}) or
+                    external tool (Impeccable, Superpowers, Taste,
+                    UI UX Pro Max) — not just ones the preset already lists.
+                    This is how a generic preset like "learning" picks up a
+                    specific stack, e.g.:
+                      init learning . --with=react-best-practices
+                      init learning . --with=api-designer,security-reviewer
+
+                  External tools a preset lists are NOT installed by default
+                  — only their install command is printed. --with-external
+                  installs all of them; --with=<name> installs just that one
+                  (works for external tools too, not only domain skills).
 
 Coming soon:
   ${[...COMING_SOON].join(', ')}

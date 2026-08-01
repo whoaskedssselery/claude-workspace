@@ -1,11 +1,14 @@
+🇬🇧 English · [🇷🇺 Русский](README.ru.md)
+
 # Claude Workspace
 
 Opinionated workspace manager for Claude Code.
 
-Install learning-oriented presets with a single command:
+Prepare a project for a specific way of working — learning, day-to-day project work, a graded
+assignment, a redesign, contributing to someone else's repo — with a single command:
 
 ```bash
-npx claude-workspace init react-learning
+npx claude-workspace init <preset>
 ```
 
 This installs, into the current directory:
@@ -21,61 +24,68 @@ This installs, into the current directory:
 Skills are installed the way Claude Code expects them: one directory per skill under
 `.claude/skills/<name>/SKILL.md`.
 
-## Skill layout
+## Presets
 
-- `skills/core/` — behavioral skills plus **CodeGraph**. Copied into every preset regardless of
-  domain. CodeGraph moved here from `frontend/` because it's a general code-navigation tool, useful
-  well beyond React — keeping it core avoids re-explaining/re-invoking it per domain and saves
-  tokens: [learning-guard](skills/core/learning-guard/SKILL.md), [teacher](skills/core/teacher/SKILL.md),
-  [health-review](skills/core/health-review/SKILL.md), [commit-discipline](skills/core/commit-discipline/SKILL.md),
-  [codegraph](skills/core/codegraph/SKILL.md) (usage guide for the
-  [CodeGraph](https://github.com/colbymchenry/codegraph) MCP server — requires installing CodeGraph
-  itself separately, `codegraph install`).
-- `skills/frontend/` — [react-best-practices](skills/frontend/react-best-practices/SKILL.md),
-  vendored as-is from [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) (MIT).
-- `skills/design/` — [claude-design](skills/design/claude-design/SKILL.md), vendored from
-  [jiji262/claude-design-skill](https://github.com/jiji262/claude-design-skill) (MIT): turns Claude
-  into an HTML-artifact designer (decks, landing pages, prototypes).
-- `skills/backend/` — [api-designer](skills/backend/api-designer/SKILL.md) and
+Presets are usage patterns, not tech stacks. None of them are React-specific or backend-specific —
+pick the preset that matches *how* you're working, then bolt on the actual technology with `--with=`
+(see below).
+
+| Preset | Core behavior | For |
+|---|---|---|
+| `learning` | [learning-guard](skills/core/learning-guard/SKILL.md), [teacher](skills/core/teacher/SKILL.md), [health-review](skills/core/health-review/SKILL.md), [commit-discipline](skills/core/commit-discipline/SKILL.md), [codegraph](skills/core/codegraph/SKILL.md) | Learning any technology. The human writes all application code; Claude teaches, reviews, and designs. Technology-agnostic — tell Claude what you're learning, it doesn't need a dedicated preset per stack. |
+| `project` | health-review, commit-discipline, codegraph | Day-to-day work on an existing/production project. No learning restrictions — Claude writes code normally. |
+| `assignment` | [assignment-mode](skills/core/assignment-mode/SKILL.md), commit-discipline, codegraph | University coursework, take-home tests, graded exercises. Claude may write the solution directly, but explains its reasoning and stays inside the stated requirements — see the skill for the academic-integrity framing. |
+| `redesign` | health-review, commit-discipline, codegraph | Projects that need visual work, not a learning exercise — drops learning-guard/teacher. Skills: [claude-design](skills/design/claude-design/SKILL.md), [react-best-practices](skills/frontend/react-best-practices/SKILL.md); external: `taste`, `ui-ux-pro-max`, `impeccable`. |
+| `oss-contribution` | commit-discipline, codegraph | Contributing to someone else's repository — minimal, convention-following diffs. |
+
+## Skill catalog
+
+- **`skills/core/`** — behavioral skills, copied into every preset that lists them. `codegraph` lives
+  here (not under a domain) because it's a general code-navigation tool useful across every domain,
+  not just frontend — keeping it core avoids re-explaining/re-invoking it per stack and saves tokens.
+- **`skills/frontend/`** — [react-best-practices](skills/frontend/react-best-practices/SKILL.md),
+  vendored from [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) (MIT).
+- **`skills/design/`** — [claude-design](skills/design/claude-design/SKILL.md), vendored from
+  [jiji262/claude-design-skill](https://github.com/jiji262/claude-design-skill) (MIT).
+- **`skills/backend/`** — [api-designer](skills/backend/api-designer/SKILL.md) and
   [security-reviewer](skills/backend/security-reviewer/SKILL.md), vendored from
   [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) (MIT).
 
-Each of the above is a static, portable `SKILL.md` (+ optional reference files) with no installer of
-its own, so `init` always copies it directly — no flag needed.
+Everything above is a static, portable `SKILL.md` (+ optional reference files) with no installer of
+its own, so `init` copies it directly whenever it's requested — no flag needed for domain skills.
+
+## Picking a technology: `--with=`
+
+Presets don't hardcode a stack, so this is how you tell `init` what you actually want on top of the
+preset's core behavior. `--with=` accepts **any** known skill name — domain skills and external
+tools alike — comma-separated, and works for more than one at a time:
+
+```bash
+npx claude-workspace init learning . --with=react-best-practices
+npx claude-workspace init learning . --with=api-designer,security-reviewer
+npx claude-workspace init redesign . --with=taste,claude-design
+```
+
+It isn't limited to what the chosen preset already lists — `learning` ships with an empty skill
+list precisely so `--with=` is the only thing that decides which stack you're learning.
 
 ## External tools
 
 Some named skills are full tools with their own installer or plugin marketplace, not a portable
 file — vendoring a copy would drift from upstream immediately. `init` never pulls these down by
-default; it only prints the install command, since not every project needs them:
+default; it only prints the install command:
 
-| Name            | Source                                                                          | Install command |
-|------------------|---------------------------------------------------------------------------------|------------------|
-| `impeccable`     | [pbakaus/impeccable](https://github.com/pbakaus/impeccable)                     | `npx impeccable install --providers=claude --scope=project` |
-| `superpowers`    | [obra/superpowers](https://github.com/obra/superpowers)                         | `claude plugin marketplace add obra/superpowers-marketplace` then `claude plugin install superpowers@superpowers-marketplace --scope project` |
-| `taste`          | [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill)                 | `npx skills add https://github.com/Leonxlnx/taste-skill --skill "design-taste-frontend"` |
-| `ui-ux-pro-max`  | [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | `npm install -g ui-ux-pro-max-cli` then `uipro init --ai claude` |
+| Name | Source | Install command |
+|---|---|---|
+| `impeccable` | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) | `npx impeccable install --providers=claude --scope=project` |
+| `superpowers` | [obra/superpowers](https://github.com/obra/superpowers) | `claude plugin marketplace add obra/superpowers-marketplace` then `claude plugin install superpowers@superpowers-marketplace --scope project` |
+| `taste` | [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) | `npx skills add https://github.com/Leonxlnx/taste-skill --skill "design-taste-frontend"` |
+| `ui-ux-pro-max` | [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | `npm install -g ui-ux-pro-max-cli` then `uipro init --ai claude` |
 
-Pick what you actually want installed:
-
-```bash
-npx claude-workspace init redesign . --with=taste            # just this one
-npx claude-workspace init redesign . --with=taste,impeccable  # a specific subset
-npx claude-workspace init redesign . --with-external          # everything the preset lists
-```
-
-If an installer isn't reachable even then (no network, `claude`/`npx` not on PATH), `init` doesn't
-fail — it prints the manual command instead and keeps going.
-
-## Presets
-
-- **react-learning** — learning-first React/TypeScript: full core, `react-best-practices`;
-  `impeccable` and `superpowers` listed as external.
-- **redesign** — for projects that need visual work done, not a learning exercise, so it drops
-  `learning-guard`/`teacher` and keeps `health-review` + `commit-discipline` + `codegraph`. Skills:
-  `claude-design`, `react-best-practices`; external: `taste`, `ui-ux-pro-max`, `impeccable`.
-- **backend-learning** — same learning philosophy as react-learning, aimed at API/backend work.
-  Full core; skills: `api-designer`, `security-reviewer`.
+`--with=<name>` installs that one for real (runs its installer); `--with-external` installs every
+external tool the chosen preset lists. Without either, `init` just prints the command. If an
+installer isn't reachable even then (no network, `claude`/`npx` not on PATH), `init` doesn't fail —
+it prints the manual command instead and keeps going.
 
 ## Usage
 
@@ -96,9 +106,9 @@ until it is. To try it against a real project before publishing:
 ```bash
 npm pack                        # produces claude-workspace-<version>.tgz
 cd /path/to/some/test-project
-npx -p /absolute/path/to/claude-workspace-<version>.tgz claude-workspace init react-learning .
+npx -p /absolute/path/to/claude-workspace-<version>.tgz claude-workspace init learning .
 ```
 
 `npx <tarball-path> <args>` (without `-p`) has been observed to silently do nothing on Windows/Git
 Bash — no output, no error, exit code 0. Use the `-p <tarball> claude-workspace <args>` form above,
-or just run the script directly with `node scripts/workspace.js init react-learning <targetDir>`.
+or just run the script directly with `node scripts/workspace.js init learning <targetDir>`.

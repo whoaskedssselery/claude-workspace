@@ -1,0 +1,7 @@
+name: oss-contribution
+
+core:
+  - commit-discipline
+  - codegraph
+
+skills: []
