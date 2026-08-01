@@ -41,7 +41,31 @@ const EXTERNAL_TOOLS = {
 			{ command: 'claude', args: ['plugin', 'install', 'superpowers@superpowers-marketplace', '--scope', 'project'] },
 		],
 	},
+	taste: {
+		url: 'https://github.com/Leonxlnx/taste-skill',
+		manualInstall: 'npx skills add https://github.com/Leonxlnx/taste-skill --skill "design-taste-frontend"',
+		steps: [
+			{
+				command: 'npx',
+				args: ['skills', 'add', 'https://github.com/Leonxlnx/taste-skill', '--skill', 'design-taste-frontend'],
+			},
+		],
+	},
+	'ui-ux-pro-max': {
+		url: 'https://github.com/nextlevelbuilder/ui-ux-pro-max-skill',
+		manualInstall: 'npm install -g ui-ux-pro-max-cli && uipro init --ai claude',
+		steps: [
+			{ command: 'npm', args: ['install', '-g', 'ui-ux-pro-max-cli'] },
+			{ command: 'uipro', args: ['init', '--ai', 'claude'] },
+		],
+	},
 };
+
+/**
+ * Domain folders that hold vendored, portable skills (as opposed to
+ * skills/core, which is copied into every preset regardless of domain).
+ */
+const DOMAIN_DIRS = ['frontend', 'design', 'backend'];
 
 /**
  * Runs an external tool's own installer as a child process. Falls back to
@@ -134,6 +158,17 @@ async function copySkill(kind, name, destDir) {
 	return true;
 }
 
+/**
+ * A domain skill (as opposed to a core skill or an external tool) can live
+ * under any of DOMAIN_DIRS — find and copy it from whichever one has it.
+ */
+async function copyDomainSkill(name, destDir) {
+	for (const kind of DOMAIN_DIRS) {
+		if (await copySkill(kind, name, destDir)) return true;
+	}
+	return false;
+}
+
 const GITIGNORE_MARKER_START = '# --- claude-workspace: local Claude Code state (do not remove this block) ---';
 const GITIGNORE_MARKER_END = '# --- end claude-workspace ---';
 const GITIGNORE_BLOCK = [
@@ -160,7 +195,7 @@ async function ensureGitignore(targetDir) {
 	await fs.writeFile(gitignorePath, existing + separator + GITIGNORE_BLOCK, 'utf8');
 }
 
-async function init(presetName, targetDir, { withExternal = false } = {}) {
+async function init(presetName, targetDir, { withExternal = false, withNames = null } = {}) {
 	const preset = await loadPreset(presetName);
 
 	const claudeDir = path.join(targetDir, '.claude');
@@ -181,8 +216,9 @@ async function init(presetName, targetDir, { withExternal = false } = {}) {
 	for (const name of preset.skills ?? []) {
 		const external = EXTERNAL_TOOLS[name];
 		if (external) {
-			if (!withExternal) {
-				warn(`"${name}" is a separate tool, not installed automatically. Run with --with-external to install it, or by hand:`);
+			const wanted = withExternal || (withNames?.includes(name) ?? false);
+			if (!wanted) {
+				warn(`"${name}" is a separate tool, not installed automatically. Run with --with=${name} to install it, or by hand:`);
 				warn(`    ${external.manualInstall}`);
 				continue;
 			}
@@ -190,9 +226,17 @@ async function init(presetName, targetDir, { withExternal = false } = {}) {
 			if (ok) installedExternal.push(name);
 			continue;
 		}
-		const ok = await copySkill('frontend', name, skillsDestDir);
+		const ok = await copyDomainSkill(name, skillsDestDir);
 		if (ok) installedSkills.push(name);
-		else warn(`skill "${name}" not found in ${SKILLS_DIR}/frontend — skipped`);
+		else warn(`skill "${name}" not found in any of skills/{${DOMAIN_DIRS.join(',')}} — skipped`);
+	}
+
+	if (withNames) {
+		for (const name of withNames) {
+			if (!(preset.skills ?? []).includes(name)) {
+				warn(`--with=${name} ignored: "${name}" isn't listed in this preset's skills`);
+			}
+		}
 	}
 
 	const workspaceTemplate = await fs.readFile(
@@ -238,15 +282,16 @@ function printHelp() {
 claude-workspace — prepare a project for Claude Code in one command
 
 Usage:
-  claude-workspace init <preset> [targetDir] [--with-external]
+  claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,name,...>]
 
 Commands:
   init <preset>   Install a preset's skills, workspace manifest and CLAUDE.md
                   (targetDir defaults to the current directory).
                   External tools the preset lists (e.g. Impeccable,
-                  Superpowers) are NOT installed by default — only their
-                  install command is printed. Pass --with-external to have
-                  init run those installers for you.
+                  Superpowers, Taste, UI UX Pro Max) are NOT installed by
+                  default — only their install command is printed.
+                    --with-external        install all of them
+                    --with=taste,impeccable  install only the ones named
 
 Coming soon:
   ${[...COMING_SOON].join(', ')}
@@ -263,14 +308,22 @@ async function main() {
 
 	if (command === 'init') {
 		const withExternal = args.includes('--with-external');
+		const withArg = args.find((arg) => arg.startsWith('--with='));
+		const withNames = withArg
+			? withArg
+					.slice('--with='.length)
+					.split(',')
+					.map((s) => s.trim())
+					.filter(Boolean)
+			: null;
 		const positional = args.filter((arg) => !arg.startsWith('--'));
 		const [presetName, targetDir = process.cwd()] = positional;
 		if (!presetName) {
-			console.error('Usage: claude-workspace init <preset> [targetDir] [--with-external]');
+			console.error('Usage: claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,name,...>]');
 			process.exitCode = 1;
 			return;
 		}
-		await init(presetName, path.resolve(targetDir), { withExternal });
+		await init(presetName, path.resolve(targetDir), { withExternal, withNames });
 		return;
 	}
 

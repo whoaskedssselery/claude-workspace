@@ -1,4 +1,4 @@
-name: react-learning
+name: backend-learning
 
 core:
   - learning-guard
@@ -8,6 +8,5 @@ core:
   - codegraph
 
 skills:
-  - react-best-practices
-  - impeccable
-  - superpowers
+  - api-designer
+  - security-reviewer

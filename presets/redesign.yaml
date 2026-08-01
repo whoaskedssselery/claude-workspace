@@ -1,13 +1,13 @@
-name: react-learning
+name: redesign
 
 core:
-  - learning-guard
-  - teacher
   - health-review
   - commit-discipline
   - codegraph
 
 skills:
+  - claude-design
   - react-best-practices
+  - taste
+  - ui-ux-pro-max
   - impeccable
-  - superpowers
