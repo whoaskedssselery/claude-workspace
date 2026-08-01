@@ -18,7 +18,7 @@
 		"test": "node --test test/*.test.js"
 	},
 	"bin": {
-		"claude-workspace": "./scripts/workspace.js"
+		"claude-workspace": "scripts/workspace.js"
 	},
 	"files": [
 		"scripts",
