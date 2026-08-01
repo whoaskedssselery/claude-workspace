@@ -2,6 +2,9 @@
 
 # Claude Workspace
 
+[![CI](https://github.com/whoaskedssselery/claude-workspace/actions/workflows/ci.yml/badge.svg)](https://github.com/whoaskedssselery/claude-workspace/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Opinionated workspace manager for Claude Code.
 
 Prepare a project for a specific way of working — learning, day-to-day project work, a graded
@@ -174,3 +177,20 @@ npx -p /absolute/path/to/claude-workspace-<version>.tgz claude-workspace init le
 `npx <tarball-path> <args>` (without `-p`) has been observed to silently do nothing on Windows/Git
 Bash — no output, no error, exit code 0. Use the `-p <tarball> claude-workspace <args>` form above,
 or just run the script directly with `node scripts/workspace.js init learning <targetDir>`.
+
+## Testing
+
+Zero dependencies, including for tests — they run on Node's built-in test runner:
+
+```bash
+npm test
+```
+
+Covers the YAML sub-parser, the Levenshtein typo-suggestion logic, frontmatter description
+extraction, `.gitignore` merging (including idempotency and preserving existing content), and
+`init`/`sync` end-to-end against real presets and skills in a temp directory. CI runs this on
+Node 18/20/22 on every push and PR.
+
+## License
+
+[MIT](LICENSE)

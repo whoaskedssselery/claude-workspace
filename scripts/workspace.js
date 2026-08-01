@@ -3,7 +3,7 @@
 import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -547,7 +547,35 @@ async function main() {
 	process.exitCode = 1;
 }
 
-main().catch((error) => {
-	console.error(`\nError: ${error.message}`);
-	process.exitCode = 1;
-});
+// Only run the CLI when this file is the actual entrypoint (`node
+// scripts/workspace.js ...` or the `claude-workspace` bin) — not when it's
+// imported by the test suite, which needs the functions below without
+// triggering argv parsing or process.exit.
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+	main().catch((error) => {
+		console.error(`\nError: ${error.message}`);
+		process.exitCode = 1;
+	});
+}
+
+export {
+	parseSimpleYaml,
+	renderYamlList,
+	renderMarkdownList,
+	editDistance,
+	suggestName,
+	extractDescription,
+	truncate,
+	copySkill,
+	copyDomainSkill,
+	loadPreset,
+	ensureGitignore,
+	init,
+	sync,
+	list,
+	SKILLS_DIR,
+	PRESETS_DIR,
+	DOMAIN_DIRS,
+	EXTERNAL_TOOLS,
+};

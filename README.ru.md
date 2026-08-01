@@ -2,6 +2,9 @@
 
 # Claude Workspace
 
+[![CI](https://github.com/whoaskedssselery/claude-workspace/actions/workflows/ci.yml/badge.svg)](https://github.com/whoaskedssselery/claude-workspace/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Опинионированный менеджер воркспейсов для Claude Code.
 
 Подготавливает проект под конкретный способ работы — обучение, повседневная работа над проектом,
@@ -179,3 +182,20 @@ npx -p /absolute/path/to/claude-workspace-<version>.tgz claude-workspace init le
 Замечено, что `npx <tarball-path> <args>` (без `-p`) на Windows/Git Bash молча ничего не делает —
 без вывода, без ошибки, exit code 0. Используйте форму `-p <tarball> claude-workspace <args>` выше,
 либо просто запустите скрипт напрямую: `node scripts/workspace.js init learning <targetDir>`.
+
+## Тесты
+
+Ноль зависимостей — в том числе для тестов, они гоняются на встроенном тест-раннере Node:
+
+```bash
+npm test
+```
+
+Покрывает мини-парсер YAML, логику подсказок по опечаткам (Левенштейн), извлечение description из
+frontmatter, слияние `.gitignore` (включая идемпотентность и сохранение существующего содержимого),
+и `init`/`sync` end-to-end на реальных пресетах и скиллах во временной директории. CI гоняет это на
+Node 18/20/22 при каждом push и PR.
+
+## Лицензия
+
+[MIT](LICENSE)
