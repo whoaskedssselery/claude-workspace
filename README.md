@@ -69,22 +69,31 @@ itself — not a technology choice, a *how strict/how much explanation* choice. 
 - **`skills/core/`** — behavioral skills, copied into every preset that lists them. `codegraph` lives
   here (not under a domain) because it's a general code-navigation tool useful across every domain,
   not just frontend — keeping it core avoids re-explaining/re-invoking it per stack and saves tokens.
-- **`skills/frontend/`** — [react-best-practices](skills/frontend/react-best-practices/SKILL.md),
-  vendored from [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) (MIT).
+- **`skills/frontend/`** — react-best-practices (vendored from
+  [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills), MIT), plus
+  react-expert, vue-expert and graphql-architect (from
+  [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills), MIT).
 - **`skills/design/`** — [claude-design](skills/design/claude-design/SKILL.md), vendored from
   [jiji262/claude-design-skill](https://github.com/jiji262/claude-design-skill) (MIT).
-- **`skills/backend/`** — [api-designer](skills/backend/api-designer/SKILL.md),
-  [security-reviewer](skills/backend/security-reviewer/SKILL.md) and
-  [database-optimizer](skills/backend/database-optimizer/SKILL.md), vendored from
-  [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) (MIT).
-- **`skills/planning/`** — [feature-forge](skills/planning/feature-forge/SKILL.md), also from
-  [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) (MIT): structured
+- **`skills/backend/`** — api-designer, security-reviewer, database-optimizer,
+  microservices-architect and websocket-engineer.
+- **`skills/fullstack/`** — fullstack-guardian (frontend/backend consistency, shared contracts).
+- **`skills/ml/`** — ml-pipeline, rag-architect, fine-tuning-expert, pandas-pro, spark-engineer.
+- **`skills/devops/`** — devops-engineer, kubernetes-specialist, terraform-engineer, cloud-architect.
+- **`skills/general/`** — code-reviewer, debugging-wizard, test-master — cross-cutting, not tied to
+  one domain.
+- **`skills/planning/`** — [feature-forge](skills/planning/feature-forge/SKILL.md): structured
   requirements workshops — user stories, EARS-format requirements, acceptance criteria,
   implementation checklists. Not bundled into any preset by default; add it with `--with=feature-forge`
   wherever you want a planning pass before building.
 - **`skills/formats/`** — original, not vendored: [assignment-defend](skills/formats/assignment-defend/SKILL.md)
   and [spike](skills/formats/spike/SKILL.md), optional behavioral variants (see
   [Format variants](#format-variants)).
+
+Everything in `skills/frontend`, `backend`, `fullstack`, `ml`, `devops`, `general` and `planning`
+(other than react-best-practices and claude-design) is vendored from
+[Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) (MIT) — run
+`npx claude-workspace list` for the full set with descriptions.
 
 Everything above is a static, portable `SKILL.md` (+ optional reference files) with no installer of
 its own, so `init` copies it directly whenever it's requested — no flag needed for domain skills.

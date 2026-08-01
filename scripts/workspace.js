@@ -66,9 +66,20 @@ const EXTERNAL_TOOLS = {
  * skills/core, which is copied into every preset regardless of domain).
  * `formats` holds optional behavioral variants (assignment-defend, spike)
  * that attach to a preset's baseline behavior via --with=, the same way a
- * tech skill does.
+ * tech skill does. `general` holds cross-cutting skills (code review,
+ * debugging, testing strategy) that aren't tied to one domain.
  */
-const DOMAIN_DIRS = ['frontend', 'design', 'backend', 'planning', 'formats'];
+const DOMAIN_DIRS = [
+	'frontend',
+	'design',
+	'backend',
+	'fullstack',
+	'ml',
+	'devops',
+	'general',
+	'planning',
+	'formats',
+];
 
 /**
  * Every skill/tool name init or sync can resolve, across all domains plus

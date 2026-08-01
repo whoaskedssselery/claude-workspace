@@ -71,16 +71,19 @@ React или бэкенду — выбираете пресет под то, *к
   `codegraph` живёт именно тут (а не в доменной папке), потому что это универсальный инструмент
   навигации по коду, полезный в любой области, а не только во фронтенде — так он не требует
   повторного объяснения/подключения под каждый стек и экономит токены.
-- **`skills/frontend/`** — [react-best-practices](skills/frontend/react-best-practices/SKILL.md),
-  завендорено из [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) (MIT).
+- **`skills/frontend/`** — react-best-practices (завендорено из
+  [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills), MIT), плюс react-expert,
+  vue-expert и graphql-architect (из [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills), MIT).
 - **`skills/design/`** — [claude-design](skills/design/claude-design/SKILL.md), завендорено из
   [jiji262/claude-design-skill](https://github.com/jiji262/claude-design-skill) (MIT).
-- **`skills/backend/`** — [api-designer](skills/backend/api-designer/SKILL.md),
-  [security-reviewer](skills/backend/security-reviewer/SKILL.md) и
-  [database-optimizer](skills/backend/database-optimizer/SKILL.md), завендорено из
-  [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) (MIT).
-- **`skills/planning/`** — [feature-forge](skills/planning/feature-forge/SKILL.md), тоже из
-  [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) (MIT): структурированные
+- **`skills/backend/`** — api-designer, security-reviewer, database-optimizer,
+  microservices-architect и websocket-engineer.
+- **`skills/fullstack/`** — fullstack-guardian (согласованность фронта и бэка, общие контракты).
+- **`skills/ml/`** — ml-pipeline, rag-architect, fine-tuning-expert, pandas-pro, spark-engineer.
+- **`skills/devops/`** — devops-engineer, kubernetes-specialist, terraform-engineer, cloud-architect.
+- **`skills/general/`** — code-reviewer, debugging-wizard, test-master — сквозные, не привязаны к
+  одному домену.
+- **`skills/planning/`** — [feature-forge](skills/planning/feature-forge/SKILL.md): структурированные
   воркшопы по требованиям — user stories, требования в формате EARS, критерии приёмки, чеклисты
   реализации. По умолчанию не встроен ни в один пресет — добавляйте `--with=feature-forge`, где
   нужен этап планирования перед разработкой.
@@ -88,6 +91,11 @@ React или бэкенду — выбираете пресет под то, *к
   [assignment-defend](skills/formats/assignment-defend/SKILL.md) и
   [spike](skills/formats/spike/SKILL.md), опциональные поведенческие варианты (см.
   [Варианты формата](#варианты-формата)).
+
+Всё в `skills/frontend`, `backend`, `fullstack`, `ml`, `devops`, `general` и `planning` (кроме
+react-best-practices и claude-design) завендорено из
+[Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) (MIT) — весь список с
+описаниями смотрите через `npx claude-workspace list`.
 
 Всё перечисленное — статичный, портативный `SKILL.md` (+ опциональные reference-файлы) без
 собственного установщика, так что `init` копирует его напрямую по первому запросу — флаг для
