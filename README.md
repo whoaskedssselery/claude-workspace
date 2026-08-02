@@ -9,10 +9,10 @@ Opinionated workspace manager for Claude Code.
 
 Prepare a project for a specific way of working — learning, day-to-day project work, a graded
 assignment, a redesign, contributing to someone else's repo — with a single command. Install it
-globally:
+globally, with whichever package manager you use:
 
 ```bash
-npm install -g claude-workspace
+npm install -g claude-workspace    # or: pnpm add -g / yarn global add / bun add -g claude-workspace
 claude-workspace init
 ```
 
@@ -25,12 +25,15 @@ directly, no prompts:
 claude-workspace init <preset>
 ```
 
-Don't want a global install? Both work the same way through `npx`:
+Don't want a global install? Every package manager has a run-without-installing equivalent, and
+they all work the same way:
 
-```bash
-npx claude-workspace init          # wizard
-npx claude-workspace init <preset> # scriptable
-```
+| Package manager | Wizard | Scriptable |
+|---|---|---|
+| npm | `npx claude-workspace init` | `npx claude-workspace init <preset>` |
+| pnpm | `pnpm dlx claude-workspace init` | `pnpm dlx claude-workspace init <preset>` |
+| yarn | `yarn dlx claude-workspace init` | `yarn dlx claude-workspace init <preset>` |
+| bun | `bunx claude-workspace init` | `bunx claude-workspace init <preset>` |
 
 This installs, into the current directory:
 
@@ -228,10 +231,11 @@ skill and update `workspace.yaml` to match, without re-running the whole `init` 
 external tool only stops tracking it in `workspace.yaml`; it does not run the tool's own
 uninstaller.
 
-`update` is best-effort: if you installed globally, it upgrades the package; if you run everything
-through `npx` (which already always fetches the latest version), the `npm install -g` step simply
-has nothing to do and is skipped without treating that as an error. Either way it finishes with a
-`sync`.
+`update` is best-effort: it guesses which package manager manages the running install from its
+real file path (pnpm/yarn/bun each have a recognizable global-install directory; anything else
+defaults to npm) and runs that manager's global-update command. If you run everything through
+`npx`/`pnpm dlx`/`bunx` (which already always fetch the latest version), that step simply has
+nothing to do and is skipped without treating it as an error. Either way it finishes with a `sync`.
 
 ## Usage
 

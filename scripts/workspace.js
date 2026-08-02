@@ -11,7 +11,8 @@ import { GLOBAL_PRESETS_DIR } from './lib/i18n.js';
 
 const execFileAsync = promisify(execFile);
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
 
 const SKILLS_DIR = path.join(ROOT, 'skills');
@@ -558,15 +559,50 @@ async function removeSkills(targetDir, names) {
  * it fails — e.g. the CLI was run via npx, which already always uses the
  * latest version, so there's nothing global to update.
  */
+/**
+ * Update commands for every package manager that can install an npm-
+ * registry package globally. `npx`/`dlx`/`bunx` don't need updating (they
+ * always fetch latest), so only the "install globally" managers matter here.
+ */
+const PACKAGE_MANAGER_UPDATE_COMMANDS = {
+	npm: { command: 'npm', args: ['install', '-g', 'claude-workspace@latest'] },
+	pnpm: { command: 'pnpm', args: ['add', '-g', 'claude-workspace@latest'] },
+	yarn: { command: 'yarn', args: ['global', 'add', 'claude-workspace@latest'] },
+	bun: { command: 'bun', args: ['add', '-g', 'claude-workspace@latest'] },
+};
+
+/**
+ * Best-effort guess at which package manager manages a globally-installed
+ * binary, from the real (symlink-resolved) path of the running script —
+ * each manager's global install directory has a recognizable fragment in
+ * it. Falls back to npm, since Node always ships it and it's the most
+ * common case.
+ */
+function detectPackageManager(realScriptPath) {
+	const normalized = realScriptPath.replace(/\\/g, '/').toLowerCase();
+	if (normalized.includes('/pnpm/')) return 'pnpm';
+	if (normalized.includes('/.bun/')) return 'bun';
+	if (normalized.includes('/yarn/')) return 'yarn';
+	return 'npm';
+}
+
 async function updatePackage(targetDir) {
-	console.log('\nUpdating the global claude-workspace package (npm install -g claude-workspace@latest)...');
+	let pm = 'npm';
 	try {
-		await execFileAsync('npm', ['install', '-g', 'claude-workspace@latest'], { shell: true });
+		pm = detectPackageManager(await fs.realpath(process.argv[1] ?? __filename));
+	} catch {
+		// process.argv[1] not resolvable (e.g. run from a REPL) — default to npm.
+	}
+	const { command, args } = PACKAGE_MANAGER_UPDATE_COMMANDS[pm];
+
+	console.log(`\nUpdating the global claude-workspace package (${command} ${args.join(' ')})...`);
+	try {
+		await execFileAsync(command, args, { shell: true });
 		console.log('Package updated.');
 	} catch (error) {
 		warn(`Could not update the global package: ${error.message.split('\n')[0]}`);
-		warn('If you run this via npx, that already always uses the latest version — nothing to do here.');
-		warn('If you installed globally, update it yourself: npm install -g claude-workspace@latest');
+		warn('If you run this via npx/pnpm dlx/bunx, that already always uses the latest version — nothing to do here.');
+		warn(`If you installed globally, update it yourself: ${command} ${args.join(' ')}`);
 	}
 	await sync(targetDir);
 }
@@ -870,6 +906,7 @@ export {
 	addSkills,
 	removeSkills,
 	updatePackage,
+	detectPackageManager,
 	describeSkill,
 	listKnownNames,
 	SKILLS_DIR,

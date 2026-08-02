@@ -19,6 +19,7 @@ import {
 	ensureGitignore,
 	init,
 	sync,
+	detectPackageManager,
 	SKILLS_DIR,
 } from '../scripts/workspace.js';
 
@@ -209,6 +210,43 @@ describe('ensureGitignore', () => {
 		} finally {
 			rmSync(dir2, { recursive: true, force: true });
 		}
+	});
+});
+
+describe('detectPackageManager', () => {
+	test('detects pnpm from a pnpm global-store-style path', () => {
+		assert.equal(
+			detectPackageManager('/home/user/.local/share/pnpm/global/5/node_modules/claude-workspace/scripts/workspace.js'),
+			'pnpm'
+		);
+	});
+
+	test('detects bun from a bun global-install-style path', () => {
+		assert.equal(
+			detectPackageManager('/home/user/.bun/install/global/node_modules/claude-workspace/scripts/workspace.js'),
+			'bun'
+		);
+	});
+
+	test('detects yarn from a yarn global-style path', () => {
+		assert.equal(
+			detectPackageManager('/home/user/.config/yarn/global/node_modules/claude-workspace/scripts/workspace.js'),
+			'yarn'
+		);
+	});
+
+	test('defaults to npm for a typical npm global path', () => {
+		assert.equal(
+			detectPackageManager('/usr/local/lib/node_modules/claude-workspace/scripts/workspace.js'),
+			'npm'
+		);
+	});
+
+	test('is case-insensitive and normalizes Windows-style backslashes', () => {
+		assert.equal(
+			detectPackageManager('C:\\Users\\me\\AppData\\Local\\pnpm\\global\\5\\node_modules\\claude-workspace\\scripts\\workspace.js'),
+			'pnpm'
+		);
 	});
 });
 

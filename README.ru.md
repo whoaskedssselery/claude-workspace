@@ -9,10 +9,10 @@
 
 Подготавливает проект под конкретный способ работы — обучение, повседневная работа над проектом,
 учебное/тестовое задание, редизайн, вклад в чужой репозиторий — одной командой. Установите
-глобально:
+глобально любым пакетным менеджером, каким пользуетесь:
 
 ```bash
-npm install -g claude-workspace
+npm install -g claude-workspace    # или: pnpm add -g / yarn global add / bun add -g claude-workspace
 claude-workspace init
 ```
 
@@ -25,12 +25,15 @@ claude-workspace init
 claude-workspace init <preset>
 ```
 
-Не хотите ставить глобально? Оба варианта точно так же работают через `npx`:
+Не хотите ставить глобально? У каждого пакетного менеджера есть свой аналог "запустить без
+установки", и все они работают одинаково:
 
-```bash
-npx claude-workspace init          # мастер
-npx claude-workspace init <preset> # скриптуемый вариант
-```
+| Пакетный менеджер | Мастер | Скриптуемый вариант |
+|---|---|---|
+| npm | `npx claude-workspace init` | `npx claude-workspace init <preset>` |
+| pnpm | `pnpm dlx claude-workspace init` | `pnpm dlx claude-workspace init <preset>` |
+| yarn | `yarn dlx claude-workspace init` | `yarn dlx claude-workspace init <preset>` |
+| bun | `bunx claude-workspace init` | `bunx claude-workspace init <preset>` |
 
 Команда устанавливает в текущую директорию:
 
@@ -230,9 +233,11 @@ claude-workspace update            # npm install -g claude-workspace@latest, з�
 `workspace.yaml`, без перезапуска всего `init`. Удаление external tool только прекращает его
 отслеживание в `workspace.yaml` — сам инструмент своим деинсталлятором не удаляется.
 
-`update` — best-effort: если пакет установлен глобально, обновит его; если всё гоняется через `npx`
-(который и так всегда берёт последнюю версию), шаг `npm install -g` просто не находит что обновлять
-и пропускается без ошибки. В любом случае в конце выполняется `sync`.
+`update` — best-effort: угадывает, каким пакетным менеджером управляется текущая установка, по
+реальному пути файла (у pnpm/yarn/bun своя узнаваемая директория глобальной установки; всё
+остальное по умолчанию считается npm) и запускает команду обновления именно этого менеджера. Если
+всё гоняется через `npx`/`pnpm dlx`/`bunx` (которые и так всегда берут последнюю версию), этому шагу
+просто нечего делать, и он пропускается без ошибки. В любом случае в конце выполняется `sync`.
 
 ## Использование
 
