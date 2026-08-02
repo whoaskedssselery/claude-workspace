@@ -128,9 +128,21 @@ function runInteractive({ render, handleKey, reserveViewport = true }) {
 	return new Promise((resolve, reject) => {
 		let lineCount = 0;
 
-		function eraseLastFrame() {
+		function eraseLastFrame(extraMargin = 0) {
 			if (lineCount === 0) return;
-			readline.moveCursor(process.stdout, 0, -lineCount);
+			// extraMargin (only ever passed by cleanup(), never by a mid-step
+			// redraw): empirically, moving up by exactly lineCount can still
+			// land a couple rows below where this frame actually started —
+			// the same discrepancy terminalRowBudget's margin exists to leave
+			// headroom for, which used to surface as leftover ghost text and,
+			// now that renders stay within budget, as a few stray blank lines
+			// before the next thing printed instead. Safe only as a one-off
+			// on the way out of a step: the extra rows reclaimed are still
+			// inside this step's own reserved viewport on the very first
+			// redraw, but applying this on *every* mid-step redraw would
+			// compound across keypresses and start eating into whatever the
+			// wizard printed before this step began.
+			readline.moveCursor(process.stdout, 0, -(lineCount + extraMargin));
 			readline.cursorTo(process.stdout, 0);
 			readline.clearScreenDown(process.stdout);
 			lineCount = 0;
@@ -150,7 +162,7 @@ function runInteractive({ render, handleKey, reserveViewport = true }) {
 		}
 
 		function cleanup() {
-			eraseLastFrame();
+			eraseLastFrame(2);
 			process.stdin.removeListener('keypress', onKeypress);
 			if (process.stdin.isTTY) process.stdin.setRawMode(false);
 			process.stdin.pause();
