@@ -112,8 +112,18 @@ export function windowSlice(length, cursor, maxVisible) {
  * moving back up to the top of that now-guaranteed-empty block before the
  * first real draw — from that known position, a render bounded to `rows`
  * can never again trigger a mid-write scroll for the rest of this step.
+ *
+ * That reservation is real terminal-writes-and-scrolls work, though — doing
+ * it before *every single* prompt in a back-to-back sequence (e.g.
+ * folderCheckbox's own select()-then-checkbox()-then-select()... loop, which
+ * never lets anything else touch the screen in between) burns one full
+ * `rows` worth of blank scrollback per step for no visual benefit, since
+ * cleanup() already leaves the *previous* step's viewport fully blank and
+ * correctly anchored. `reserveViewport: false` skips the reservation for
+ * exactly that case — callers must only pass it when they can guarantee
+ * nothing else has written to the terminal since the prior step's cleanup().
  */
-function runInteractive({ render, handleKey }) {
+function runInteractive({ render, handleKey, reserveViewport = true }) {
 	requireTTY();
 	return new Promise((resolve, reject) => {
 		let lineCount = 0;
@@ -164,7 +174,7 @@ function runInteractive({ render, handleKey }) {
 		readline.emitKeypressEvents(process.stdin);
 		process.stdin.setRawMode(true);
 		process.stdin.resume();
-		reserveFreshViewport();
+		if (reserveViewport) reserveFreshViewport();
 		draw();
 		process.stdin.on('keypress', onKeypress);
 	});
@@ -174,8 +184,13 @@ function renderSubtitle(subtitle) {
 	return subtitle ? [dim(subtitle), ''] : [];
 }
 
-/** Single-select arrow-key menu. `choices`: [{ label, value, hint }]. */
-export async function select(message, choices, { subtitle, initialCursor = 0 } = {}) {
+/**
+ * Single-select arrow-key menu. `choices`: [{ label, value, hint }].
+ * `reserveViewport` (default true): pass false only when the caller can
+ * guarantee nothing has written to the terminal since a previous prompt's
+ * cleanup — see runInteractive's own doc comment.
+ */
+export async function select(message, choices, { subtitle, initialCursor = 0, reserveViewport = true } = {}) {
 	let cursor = initialCursor >= 0 && initialCursor < choices.length ? initialCursor : 0;
 	const render = () => {
 		const header = [...renderSubtitle(subtitle), bold(message)];
@@ -205,7 +220,7 @@ export async function select(message, choices, { subtitle, initialCursor = 0 } =
 		else if (key.name === 'return') return choices[cursor].value;
 		return undefined;
 	};
-	return runInteractive({ render, handleKey });
+	return runInteractive({ render, handleKey, reserveViewport });
 }
 
 /** Yes/no arrow-key confirm, localized labels supplied by the caller. */
@@ -220,7 +235,7 @@ export async function confirm(message, { yesLabel = 'Yes', noLabel = 'No', defau
  * headers. `groups`: [{ title, items: [{ label, value, hint }] }].
  * Returns the array of selected `value`s.
  */
-export async function checkbox(message, groups, { subtitle, initialSelected } = {}) {
+export async function checkbox(message, groups, { subtitle, initialSelected, reserveViewport = true } = {}) {
 	const { items, renderEntries } = flattenGroups(groups);
 	let cursor = 0;
 	let selected = initialSelected
@@ -273,7 +288,7 @@ export async function checkbox(message, groups, { subtitle, initialSelected } = 
 		return undefined;
 	};
 
-	return runInteractive({ render, handleKey });
+	return runInteractive({ render, handleKey, reserveViewport });
 }
 
 /**
@@ -292,6 +307,13 @@ export async function checkbox(message, groups, { subtitle, initialSelected } = 
 export async function folderCheckbox(message, groups, { subtitle, doneLabel = 'Done — continue' } = {}) {
 	const selected = new Set();
 	let folderCursor = 0;
+	// Only the very first screen of this whole folder-picking session needs
+	// to reserve a fresh viewport — every screen after that is preceded
+	// solely by another prompt.js cleanup() in this same loop (nothing else
+	// writes to the terminal in between), which already leaves the viewport
+	// blank and correctly anchored, so re-reserving would just burn another
+	// full screen's worth of blank scrollback for no visible difference.
+	let reserveViewport = true;
 
 	for (;;) {
 		const folderChoices = groups.map((group, i) => {
@@ -301,7 +323,8 @@ export async function folderCheckbox(message, groups, { subtitle, doneLabel = 'D
 		});
 		folderChoices.push({ label: green(`✓ ${doneLabel}`), value: '__done__' });
 
-		const choice = await select(message, folderChoices, { subtitle, initialCursor: folderCursor });
+		const choice = await select(message, folderChoices, { subtitle, initialCursor: folderCursor, reserveViewport });
+		reserveViewport = false;
 		if (choice === '__done__') break;
 		folderCursor = choice;
 
@@ -310,6 +333,7 @@ export async function folderCheckbox(message, groups, { subtitle, doneLabel = 'D
 			const result = await checkbox(group.title ?? '', [{ title: null, items: group.items }], {
 				subtitle: [subtitle, group.title].filter(Boolean).join(' — '),
 				initialSelected: selected,
+				reserveViewport,
 			});
 			for (const item of group.items) {
 				if (result.includes(item.value)) selected.add(item.value);
