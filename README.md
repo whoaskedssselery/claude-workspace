@@ -189,10 +189,11 @@ tagged with which step you're on:
 5. **Confirm** — a colored summary of exactly what will be created, then proceeds (or cancels).
 
 Building a custom preset instead walks the full catalog (every `skills/` folder plus external
-tools) and, at the end, asks whether to **save it globally** to
-`~/.claude-workspace/presets/<name>.yaml` — if you say yes, `claude-workspace init <name>` works
-non-interactively afterward too, exactly like a built-in preset (see
-[Custom presets](#custom-presets)).
+tools) and, at the end, asks where to **save it**: to `.claude-workspace/presets/<name>.yaml` in
+the current project (commit it — your team gets it too after a clone), to
+`~/.claude-workspace/presets/<name>.yaml` (personal, any project), or not at all. Either saved
+location makes `claude-workspace init <name>` work non-interactively afterward, exactly like a
+built-in preset (see [Custom presets](#custom-presets)).
 
 **Keyboard:** arrow keys (or `j`/`k`) to move, `space` to toggle a checkbox item, digits `1`-`9` to
 jump straight to (and, in checkboxes, toggle) one of the first nine items, `a`/`n` to select
@@ -207,11 +208,32 @@ you to pass a preset name instead.
 
 ## Custom presets
 
-Presets aren't limited to the five built-in ones. `~/.claude-workspace/presets/<name>.yaml` — built
-via the wizard's "build a custom preset" path, or written by hand in the same format as the
-built-in ones under [`presets/`](presets/) — are picked up by `init`/`list` exactly like a built-in
-preset. Built-in presets always take priority on a name collision, so a custom preset can't
-accidentally shadow `learning`, `project`, etc.
+Presets aren't limited to the five built-in ones. A custom preset — built via the wizard's "build
+a custom preset" path, or written by hand in the same format as the built-in ones under
+[`presets/`](presets/) — lives in one of two places:
+
+- `.claude-workspace/presets/<name>.yaml` in the current project — commit it, and every teammate
+  gets `claude-workspace init <name>` working right after they clone, no per-machine setup.
+- `~/.claude-workspace/presets/<name>.yaml` — personal, available in any project on your machine,
+  never shared.
+
+Both are picked up by `init`/`list` exactly like a built-in preset. Built-in presets always take
+priority on a name collision, so a custom preset can't accidentally shadow `learning`, `project`,
+etc.; a project-local preset takes priority over a same-named global one.
+
+## Adding a skill from any repository
+
+```bash
+claude-workspace add vercel-labs/agent-skills
+claude-workspace add https://github.com/owner/repo/tree/main/skills/some-skill
+```
+
+`add` isn't limited to this package's own catalog — pass anything that looks like a URL, a git
+remote, or `owner/repo` shorthand, and it's fetched via [`npx skills`](https://github.com/vercel-labs/skills)
+(the same CLI this project already vendors `react-best-practices` from) straight into
+`.claude/skills/`, then recorded in `workspace.yaml` under a `remote:` section so `sync`/`doctor`/
+`remove` all know about it too. `sync` re-fetches it from the recorded source to pick up upstream
+changes; `remove` deletes the local copy and stops tracking it (the skill's own repo is untouched).
 
 ## Managing an existing workspace
 
@@ -224,7 +246,9 @@ claude-workspace update            # npm install -g claude-workspace@latest, the
 
 `doctor` reports, for every skill declared in `.claude/workspace.yaml`: **ok** (installed and
 matches this package's current version), **outdated** (installed but content has drifted — run
-`sync`), or **missing**. It also checks `CLAUDE.md` and the `.gitignore` block are present.
+`sync`), or **missing**. It also prints the `claude-workspace` version this workspace was last
+synced with vs. the one you're currently running (flagging a mismatch — useful in a team where not
+everyone updates on the same day) and checks `CLAUDE.md` and the `.gitignore` block are present.
 
 `add`/`remove` work like a single-shot version of `--with=` — they install (or uninstall) a
 skill and update `workspace.yaml` to match, without re-running the whole `init` flow. Removing an
@@ -233,9 +257,16 @@ uninstaller.
 
 `update` is best-effort: it guesses which package manager manages the running install from its
 real file path (pnpm/yarn/bun each have a recognizable global-install directory; anything else
-defaults to npm) and runs that manager's global-update command. If you run everything through
-`npx`/`pnpm dlx`/`bunx` (which already always fetch the latest version), that step simply has
-nothing to do and is skipped without treating it as an error. Either way it finishes with a `sync`.
+defaults to npm) and runs that manager's global-update command. Under `npx`/`pnpm dlx` (detected
+via npm's own `npm_command=exec` signal, plus a path-based check for pnpm/yarn) that step is
+skipped entirely rather than leaving behind a global install nobody asked for — those runners
+already fetch latest every time. Either way it finishes with a `sync`.
+
+`CLAUDE.md` is a marker-delimited block (`<!-- claude-workspace:start/end -->`) rather than an
+all-or-nothing file: `sync` refreshes what's inside the markers on every run, and anything you or a
+teammate write outside them is never touched. `init --force` merges the block into an existing
+`CLAUDE.md` that doesn't have one yet (rather than overwriting the file, which is what `--force`
+used to do).
 
 ## Usage
 
@@ -257,10 +288,13 @@ description each — the catalog's grown enough that it's easier to check this t
 
 `sync` re-copies whatever `.claude/workspace.yaml` declares from the currently installed
 `claude-workspace` package — use it after upgrading the package to pick up skill content updates
-without re-running `init`. It leaves `CLAUDE.md` alone and doesn't re-run external tools' installers
-(update those with their own CLI, e.g. `codegraph upgrade`, `uipro update`).
+without re-running `init`. It also refreshes the `claude-workspace` block in `CLAUDE.md` and
+re-fetches any remote (URL-added) skills, but doesn't re-run external tools' installers (update
+those with their own CLI, e.g. `codegraph upgrade`, `uipro update`).
 
-`init --force` overwrites an existing `CLAUDE.md` instead of leaving it untouched.
+`init --force` merges a fresh `claude-workspace` block into an existing `CLAUDE.md` that doesn't
+have one yet, instead of leaving it untouched — see [Managing an existing
+workspace](#managing-an-existing-workspace) for how the marker-delimited block works.
 
 ## Roadmap
 
@@ -272,6 +306,22 @@ Deliberately not built (yet):
 - **Monorepo support**, **post-init hooks**, **export/import of a whole workspace config.** No
   concrete need for these yet — happy to design them properly once there's a real use case driving
   the requirements, rather than guessing at the shape now.
+
+## Project structure
+
+```
+scripts/workspace.js   CLI entrypoint — argv parsing and --help text only
+scripts/lib/catalog.js   what this package ships: presets, skills, external tools, the YAML subset parser
+scripts/lib/manifest.js  a project's installed workspace: workspace.yaml, the CLAUDE.md block, .gitignore
+scripts/lib/remote.js    fetching a skill from an arbitrary repo ("add <url>")
+scripts/lib/pm.js        package-manager / npx-dlx detection, used by "update"
+scripts/lib/commands.js  the command implementations, built on the four above
+scripts/lib/wizard.js    the interactive "init" wizard (only loaded when actually invoked)
+scripts/lib/{i18n,prompt,colors}.js   wizard building blocks (translated strings, the arrow-key prompt engine, ANSI styling)
+```
+
+Each file re-exports through `scripts/workspace.js`, so `wizard.js` and the tests import
+everything from that one familiar path regardless of which lib file actually owns it.
 
 ## Local development
 
