@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, cpSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, cpSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +22,13 @@ test('running the CLI through a symlinked directory still executes main() (not a
 	try {
 		const realDir = path.join(workDir, 'real-store');
 		cpSync(REAL_SCRIPTS_DIR, realDir, { recursive: true });
+		// The real repo's scripts/workspace.js relies on the root
+		// package.json's "type": "module" one directory up. Copying only
+		// scripts/ into an unrelated temp tree loses that ancestor, so on a
+		// Node version without ESM-syntax auto-detection (e.g. 18.x — this
+		// repo's own oldest supported/CI-tested version) the copy gets
+		// loaded as CommonJS and the "import" statements fail outright.
+		writeFileSync(path.join(realDir, 'package.json'), JSON.stringify({ type: 'module' }), 'utf8');
 
 		const packageDir = path.join(workDir, 'virtual', 'node_modules', 'claude-workspace');
 		mkdirSync(packageDir, { recursive: true });
