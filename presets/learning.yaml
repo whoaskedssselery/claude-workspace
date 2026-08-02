@@ -1,4 +1,5 @@
 name: learning
+description: Learning any technology — the human writes all application code, Claude teaches and reviews.
 
 core:
   - learning-guard

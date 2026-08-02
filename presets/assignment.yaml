@@ -1,4 +1,5 @@
 name: assignment
+description: University coursework, take-home tests and other graded assignments.
 
 core:
   - assignment-mode

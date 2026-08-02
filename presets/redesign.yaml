@@ -1,4 +1,5 @@
 name: redesign
+description: Visual/UI-UX rework of an existing project — not a learning exercise.
 
 core:
   - health-review

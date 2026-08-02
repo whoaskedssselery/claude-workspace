@@ -1,4 +1,5 @@
 name: project
+description: Day-to-day work on an existing/production project — no learning restrictions.
 
 core:
   - health-review

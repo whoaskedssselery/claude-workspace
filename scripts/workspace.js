@@ -7,6 +7,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
+import { GLOBAL_PRESETS_DIR } from './lib/i18n.js';
+
 const execFileAsync = promisify(execFile);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -192,12 +194,23 @@ function renderMarkdownList(items) {
 	return items.map((item) => `- \`${item}\``).join('\n');
 }
 
+async function listPresetNames(dir) {
+	if (!existsSync(dir)) return [];
+	return (await fs.readdir(dir)).filter((f) => f.endsWith('.yaml')).map((f) => f.replace(/\.yaml$/, ''));
+}
+
+/**
+ * Built-in presets (PRESETS_DIR) take priority; falls back to custom
+ * presets a user saved globally via the init wizard
+ * (~/.claude-workspace/presets/), so `init <custom-name>` keeps working
+ * non-interactively after it's been created once.
+ */
 async function loadPreset(name) {
-	const file = path.join(PRESETS_DIR, `${name}.yaml`);
-	if (!existsSync(file)) {
-		const available = (await fs.readdir(PRESETS_DIR))
-			.filter((f) => f.endsWith('.yaml'))
-			.map((f) => f.replace(/\.yaml$/, ''));
+	const builtIn = path.join(PRESETS_DIR, `${name}.yaml`);
+	const custom = path.join(GLOBAL_PRESETS_DIR, `${name}.yaml`);
+	const file = existsSync(builtIn) ? builtIn : existsSync(custom) ? custom : null;
+	if (!file) {
+		const available = [...(await listPresetNames(PRESETS_DIR)), ...(await listPresetNames(GLOBAL_PRESETS_DIR))];
 		throw new Error(
 			`Preset "${name}" not found. Available presets: ${available.join(', ') || '(none)'}`
 		);
@@ -255,9 +268,25 @@ async function ensureGitignore(targetDir) {
 	await fs.writeFile(gitignorePath, existing + separator + GITIGNORE_BLOCK, 'utf8');
 }
 
-async function init(presetName, targetDir, { withExternal = false, withNames = null } = {}) {
-	const preset = await loadPreset(presetName);
+async function writeWorkspaceManifest(targetDir, presetName, core, skills, external) {
+	const claudeDir = path.join(targetDir, '.claude');
+	await fs.mkdir(claudeDir, { recursive: true });
+	const workspaceTemplate = await fs.readFile(path.join(TEMPLATES_DIR, 'workspace.template.yaml'), 'utf8');
+	const workspaceYaml = workspaceTemplate
+		.replace('{{PRESET}}', presetName)
+		.replace('{{CORE_LIST}}', renderYamlList(core))
+		.replace('{{SKILLS_LIST}}', renderYamlList(skills))
+		.replace('{{EXTERNAL_LIST}}', renderYamlList(external));
+	await fs.writeFile(path.join(claudeDir, 'workspace.yaml'), workspaceYaml, 'utf8');
+}
 
+/**
+ * Does the actual install work for an already-resolved preset object —
+ * shared by `init` (which loads the preset by name) and the interactive
+ * wizard (which may have just built one on the fly and not saved it
+ * anywhere yet, so there's no name to load).
+ */
+async function installPreset(preset, presetName, targetDir, { withExternal = false, withNames = null, force = false } = {}) {
 	const claudeDir = path.join(targetDir, '.claude');
 	const skillsDestDir = path.join(claudeDir, 'skills');
 	await fs.mkdir(skillsDestDir, { recursive: true });
@@ -304,20 +333,11 @@ async function init(presetName, targetDir, { withExternal = false, withNames = n
 		);
 	}
 
-	const workspaceTemplate = await fs.readFile(
-		path.join(TEMPLATES_DIR, 'workspace.template.yaml'),
-		'utf8'
-	);
-	const workspaceYaml = workspaceTemplate
-		.replace('{{PRESET}}', presetName)
-		.replace('{{CORE_LIST}}', renderYamlList(installedCore))
-		.replace('{{SKILLS_LIST}}', renderYamlList(installedSkills))
-		.replace('{{EXTERNAL_LIST}}', renderYamlList(installedExternal));
-	await fs.writeFile(path.join(claudeDir, 'workspace.yaml'), workspaceYaml, 'utf8');
+	await writeWorkspaceManifest(targetDir, presetName, installedCore, installedSkills, installedExternal);
 
 	const claudeMdPath = path.join(targetDir, 'CLAUDE.md');
-	if (existsSync(claudeMdPath)) {
-		warn('CLAUDE.md already exists — left untouched. Merge manually from templates/CLAUDE.template.md if needed.');
+	if (existsSync(claudeMdPath) && !force) {
+		warn('CLAUDE.md already exists — left untouched. Pass --force to overwrite, or merge manually from templates/CLAUDE.template.md.');
 	} else {
 		const claudeTemplate = await fs.readFile(
 			path.join(TEMPLATES_DIR, 'CLAUDE.template.md'),
@@ -338,6 +358,12 @@ async function init(presetName, targetDir, { withExternal = false, withNames = n
 	console.log(`  .claude/workspace.yaml`);
 	console.log(`  CLAUDE.md${existsSync(claudeMdPath) ? '' : ' (not written)'}`);
 	console.log(`  .gitignore  (.claude/settings.local.json, .DS_Store)\n`);
+}
+
+/** Loads a preset by name (built-in or saved globally) and installs it. */
+async function init(presetName, targetDir, opts = {}) {
+	const preset = await loadPreset(presetName);
+	return installPreset(preset, presetName, targetDir, opts);
 }
 
 /**
@@ -380,6 +406,171 @@ async function sync(targetDir) {
 	console.log('');
 }
 
+function requireWorkspace(targetDir) {
+	const workspacePath = path.join(targetDir, '.claude', 'workspace.yaml');
+	if (!existsSync(workspacePath)) {
+		throw new Error(`No .claude/workspace.yaml found in ${targetDir} — run "init" first.`);
+	}
+	return workspacePath;
+}
+
+/** Finds which domain folder (if any) currently has this skill, for doctor's staleness check. */
+function findDomainSkillSource(name) {
+	for (const kind of DOMAIN_DIRS) {
+		const dir = path.join(SKILLS_DIR, kind, name);
+		if (existsSync(path.join(dir, 'SKILL.md'))) return dir;
+	}
+	return null;
+}
+
+/**
+ * Compares an installed skill's SKILL.md against the version currently in
+ * this package. Only checks SKILL.md itself (not reference files) — good
+ * enough signal for "this has changed upstream, run sync" without a full
+ * recursive diff.
+ */
+async function checkSkillStatus(kind, name, installedSkillsDir) {
+	const installedSkillMd = path.join(installedSkillsDir, name, 'SKILL.md');
+	if (!existsSync(installedSkillMd)) return 'missing';
+
+	const sourceDir = kind === 'core' ? path.join(SKILLS_DIR, 'core', name) : findDomainSkillSource(name);
+	if (!sourceDir) return 'no longer in this package';
+
+	const [installedContent, sourceContent] = await Promise.all([
+		fs.readFile(installedSkillMd, 'utf8'),
+		fs.readFile(path.join(sourceDir, 'SKILL.md'), 'utf8'),
+	]);
+	return installedContent === sourceContent ? 'ok' : 'outdated — run sync';
+}
+
+/**
+ * Reports on the health of an existing workspace: whether declared skills
+ * are actually installed, whether their content matches what this version
+ * of the package ships (vs. having drifted, e.g. after a package update),
+ * and whether CLAUDE.md / the .gitignore block are in place.
+ */
+async function doctor(targetDir) {
+	const workspacePath = requireWorkspace(targetDir);
+	const manifest = parseSimpleYaml(await fs.readFile(workspacePath, 'utf8'));
+	const installedSkillsDir = path.join(targetDir, '.claude', 'skills');
+
+	console.log(`\nChecking workspace in ${targetDir}`);
+	console.log(`Preset: ${manifest.preset ?? '(unknown)'}\n`);
+
+	for (const name of manifest.core ?? []) {
+		console.log(`  core      ${name.padEnd(24)} ${await checkSkillStatus('core', name, installedSkillsDir)}`);
+	}
+	for (const name of manifest.skills ?? []) {
+		console.log(`  skill     ${name.padEnd(24)} ${await checkSkillStatus('domain', name, installedSkillsDir)}`);
+	}
+	for (const name of manifest.external ?? []) {
+		console.log(`  external  ${name.padEnd(24)} declared — check with its own status/update command`);
+	}
+
+	const claudeMdOk = existsSync(path.join(targetDir, 'CLAUDE.md'));
+	console.log(`\n  CLAUDE.md          ${claudeMdOk ? 'present' : 'MISSING'}`);
+
+	const gitignorePath = path.join(targetDir, '.gitignore');
+	const gitignoreOk =
+		existsSync(gitignorePath) && (await fs.readFile(gitignorePath, 'utf8')).includes(GITIGNORE_MARKER_START);
+	console.log(`  .gitignore block   ${gitignoreOk ? 'present' : 'MISSING — run sync'}`);
+
+	console.log('\nRun "claude-workspace sync" to refresh anything marked outdated or missing.\n');
+}
+
+/**
+ * Adds one or more skills/external tools to an existing workspace: copies
+ * the skill (or runs the external tool's installer) and records it in
+ * workspace.yaml. Names already present in the workspace are skipped.
+ */
+async function addSkills(targetDir, names) {
+	const workspacePath = requireWorkspace(targetDir);
+	const manifest = parseSimpleYaml(await fs.readFile(workspacePath, 'utf8'));
+	const core = manifest.core ?? [];
+	const skills = new Set(manifest.skills ?? []);
+	const external = new Set(manifest.external ?? []);
+	const skillsDestDir = path.join(targetDir, '.claude', 'skills');
+	await fs.mkdir(skillsDestDir, { recursive: true });
+
+	for (const name of names) {
+		if (core.includes(name) || skills.has(name) || external.has(name)) {
+			warn(`"${name}" is already part of this workspace — skipped`);
+			continue;
+		}
+		const tool = EXTERNAL_TOOLS[name];
+		if (tool) {
+			const ok = await installExternalTool(name, tool, targetDir);
+			if (ok) external.add(name);
+			continue;
+		}
+		const ok = await copyDomainSkill(name, skillsDestDir);
+		if (ok) {
+			skills.add(name);
+			continue;
+		}
+		const suggestion = suggestName(name, await listKnownNames());
+		warn(`"${name}" isn't a known skill or external tool — skipped` + (suggestion ? ` (did you mean "${suggestion}"?)` : ''));
+	}
+
+	await writeWorkspaceManifest(targetDir, manifest.preset ?? 'custom', core, [...skills], [...external]);
+	await ensureGitignore(targetDir);
+	console.log(`\nAdded. .claude/skills/ now has ${core.length + skills.size} skill(s); external: ${[...external].join(', ') || 'none'}.\n`);
+}
+
+/**
+ * Removes one or more skills/tools from an existing workspace: deletes the
+ * installed skill directory and drops it from workspace.yaml. For an
+ * external tool, this only stops tracking it here — it does not uninstall
+ * the tool itself (use its own uninstall command for that).
+ */
+async function removeSkills(targetDir, names) {
+	const workspacePath = requireWorkspace(targetDir);
+	const manifest = parseSimpleYaml(await fs.readFile(workspacePath, 'utf8'));
+	let core = manifest.core ?? [];
+	let skills = manifest.skills ?? [];
+	let external = manifest.external ?? [];
+	const skillsDestDir = path.join(targetDir, '.claude', 'skills');
+
+	for (const name of names) {
+		const wasCore = core.includes(name);
+		const wasSkill = skills.includes(name);
+		const wasExternal = external.includes(name);
+		if (!wasCore && !wasSkill && !wasExternal) {
+			warn(`"${name}" isn't part of this workspace — skipped`);
+			continue;
+		}
+		core = core.filter((n) => n !== name);
+		skills = skills.filter((n) => n !== name);
+		external = external.filter((n) => n !== name);
+
+		const dir = path.join(skillsDestDir, name);
+		if (existsSync(dir)) await fs.rm(dir, { recursive: true, force: true });
+		if (wasExternal) warn(`"${name}" is no longer tracked, but the tool itself was NOT uninstalled — use its own uninstall command.`);
+	}
+
+	await writeWorkspaceManifest(targetDir, manifest.preset ?? 'custom', core, skills, external);
+	console.log(`\nRemoved. Remaining: ${core.length + skills.length} skill(s); external: ${external.join(', ') || 'none'}.\n`);
+}
+
+/**
+ * Best-effort `npm install -g claude-workspace@latest`, then `sync`. The
+ * global update step is skipped gracefully (not treated as an error) when
+ * it fails — e.g. the CLI was run via npx, which already always uses the
+ * latest version, so there's nothing global to update.
+ */
+async function updatePackage(targetDir) {
+	console.log('\nUpdating the global claude-workspace package (npm install -g claude-workspace@latest)...');
+	try {
+		await execFileAsync('npm', ['install', '-g', 'claude-workspace@latest'], { shell: true });
+		console.log('Package updated.');
+	} catch (error) {
+		warn(`Could not update the global package: ${error.message.split('\n')[0]}`);
+		warn('If you run this via npx, that already always uses the latest version — nothing to do here.');
+		warn('If you installed globally, update it yourself: npm install -g claude-workspace@latest');
+	}
+	await sync(targetDir);
+}
+
 /**
  * Pulls the `description:` field out of a SKILL.md's YAML frontmatter,
  * handling both `description: text` and the folded block style
@@ -419,16 +610,31 @@ async function describeSkill(kind, name) {
 	return truncate(extractDescription(await fs.readFile(file, 'utf8')));
 }
 
-async function list() {
-	const presetFiles = (await fs.readdir(PRESETS_DIR)).filter((f) => f.endsWith('.yaml'));
+/** Shows only what's actually installed in targetDir's workspace.yaml, not the full catalog. */
+async function listInstalled(targetDir) {
+	const workspacePath = requireWorkspace(targetDir);
+	const manifest = parseSimpleYaml(await fs.readFile(workspacePath, 'utf8'));
+	console.log(`\nInstalled in ${targetDir} (preset: ${manifest.preset ?? 'unknown'}):\n`);
+	console.log(`  core:      ${(manifest.core ?? []).join(', ') || '(none)'}`);
+	console.log(`  skills:    ${(manifest.skills ?? []).join(', ') || '(none)'}`);
+	console.log(`  external:  ${(manifest.external ?? []).join(', ') || '(none)'}`);
+	console.log('');
+}
+
+async function list({ installedOnly = false, targetDir = process.cwd() } = {}) {
+	if (installedOnly) {
+		return listInstalled(targetDir);
+	}
+
+	const presetFiles = (await listPresetNames(PRESETS_DIR)).map((name) => ({ name, custom: false }));
+	const customPresetFiles = (await listPresetNames(GLOBAL_PRESETS_DIR)).map((name) => ({ name, custom: true }));
 
 	console.log('\nPresets (claude-workspace init <preset>):\n');
-	for (const file of presetFiles.sort()) {
-		const preset = parseSimpleYaml(await fs.readFile(path.join(PRESETS_DIR, file), 'utf8'));
-		const name = file.replace(/\.yaml$/, '');
+	for (const { name, custom } of [...presetFiles, ...customPresetFiles].sort((a, b) => a.name.localeCompare(b.name))) {
+		const preset = await loadPreset(name);
 		const parts = [`core: ${(preset.core ?? []).join(', ') || '(none)'}`];
 		if (preset.skills?.length) parts.push(`skills: ${preset.skills.join(', ')}`);
-		console.log(`  ${name.padEnd(18)} ${parts.join('  |  ')}`);
+		console.log(`  ${name.padEnd(18)} ${parts.join('  |  ')}${custom ? '  (custom)' : ''}`);
 	}
 
 	console.log('\nCore skills (installed only via a preset\'s own core: list):\n');
@@ -455,26 +661,32 @@ async function list() {
 	console.log('');
 }
 
-const COMING_SOON = new Set(['update', 'doctor', 'add', 'remove']);
+const COMING_SOON = new Set([]);
 
 function printHelp() {
 	console.log(`
 claude-workspace — prepare a project for Claude Code in one command
 
 Usage:
-  claude-workspace list
-  claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,name,...>]
+  claude-workspace init                                       (interactive wizard, needs a TTY)
+  claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,...>] [--force]
+  claude-workspace list [--installed] [targetDir]
   claude-workspace sync [targetDir]
+  claude-workspace add <name...>       (operates on the current directory)
+  claude-workspace remove <name...>    (operates on the current directory)
+  claude-workspace doctor [targetDir]
+  claude-workspace update [targetDir]
 
 Commands:
-  list            Show every preset, skill and external tool this package
-                  knows about, with a one-line description each.
-
-  init <preset>   Install a preset's skills, workspace manifest and CLAUDE.md
-                  (targetDir defaults to the current directory).
+  init            With no preset name and an interactive terminal, runs a
+                  step-by-step wizard: pick (or build) a preset, pick
+                  additional skills, confirm, done. With a preset name, runs
+                  non-interactively as before — install a preset's skills,
+                  workspace manifest and CLAUDE.md (targetDir defaults to the
+                  current directory).
 
                   --with=<name,name,...>  also install these skills/tools,
-                    from ANY domain (skills/{frontend,design,backend}) or
+                    from ANY domain (skills/{frontend,design,backend,...}) or
                     external tool (Impeccable, Superpowers, Taste,
                     UI UX Pro Max) — not just ones the preset already lists.
                     This is how a generic preset like "learning" picks up a
@@ -487,14 +699,47 @@ Commands:
                   installs all of them; --with=<name> installs just that one
                   (works for external tools too, not only domain skills).
 
+                  --force  overwrite an existing CLAUDE.md instead of
+                    leaving it untouched.
+
+  list            Show every preset, skill and external tool this package
+                  knows about, with a one-line description each.
+                  --installed shows only what's actually in targetDir's
+                  .claude/workspace.yaml instead of the full catalog.
+
   sync            Re-copy the skills declared in .claude/workspace.yaml from
                   the currently installed claude-workspace package (picks up
                   skill content updates). Doesn't touch CLAUDE.md or
                   re-install external tools.
 
-Coming soon:
-  ${[...COMING_SOON].join(', ')}
+  add <name...>   Add one or more skills/external tools to an existing
+                  workspace (installs it and records it in workspace.yaml).
+                  Requires "init" to have been run already.
+
+  remove <name...> Remove one or more skills/tools from an existing
+                  workspace (deletes the installed skill and drops it from
+                  workspace.yaml). For an external tool this only stops
+                  tracking it — the tool itself isn't uninstalled.
+
+  doctor          Reports whether declared skills are actually installed,
+                  whether their content matches this package's current
+                  version (or has drifted — run sync), and whether
+                  CLAUDE.md / the .gitignore block are in place.
+
+  update          Best-effort "npm install -g claude-workspace@latest",
+                  then "sync". Safe to run even under npx (which already
+                  always uses the latest version).
+
+Custom presets: the init wizard can build one on the fly and, if you say
+yes, save it to ~/.claude-workspace/presets/<name>.yaml — after that,
+"claude-workspace init <name>" works non-interactively too, same as any
+built-in preset.
 `);
+}
+
+function targetDirFrom(args) {
+	const [dir] = args.filter((arg) => !arg.startsWith('--'));
+	return path.resolve(dir ?? process.cwd());
 }
 
 async function main() {
@@ -506,12 +751,14 @@ async function main() {
 	}
 
 	if (command === 'list') {
-		await list();
+		const installedOnly = args.includes('--installed');
+		await list({ installedOnly, targetDir: targetDirFrom(args) });
 		return;
 	}
 
 	if (command === 'init') {
 		const withExternal = args.includes('--with-external');
+		const force = args.includes('--force');
 		const withArg = args.find((arg) => arg.startsWith('--with='));
 		const withNames = withArg
 			? withArg
@@ -522,18 +769,59 @@ async function main() {
 			: null;
 		const positional = args.filter((arg) => !arg.startsWith('--'));
 		const [presetName, targetDir = process.cwd()] = positional;
+
 		if (!presetName) {
-			console.error('Usage: claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,name,...>]');
-			process.exitCode = 1;
+			if (!process.stdin.isTTY) {
+				console.error(
+					'Usage: claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,name,...>] [--force]\n' +
+						'(No preset given and no interactive terminal — the wizard needs a TTY. Pass a preset name instead.)'
+				);
+				process.exitCode = 1;
+				return;
+			}
+			const { runWizard } = await import('./lib/wizard.js');
+			await runWizard(process.cwd());
 			return;
 		}
-		await init(presetName, path.resolve(targetDir), { withExternal, withNames });
+
+		await init(presetName, path.resolve(targetDir), { withExternal, withNames, force });
 		return;
 	}
 
 	if (command === 'sync') {
-		const [targetDir = process.cwd()] = args.filter((arg) => !arg.startsWith('--'));
-		await sync(path.resolve(targetDir));
+		await sync(targetDirFrom(args));
+		return;
+	}
+
+	if (command === 'add') {
+		const names = args.filter((arg) => !arg.startsWith('--'));
+		if (!names.length) {
+			console.error('Usage: claude-workspace add <name...> (operates on the current directory)');
+			process.exitCode = 1;
+			return;
+		}
+		await addSkills(process.cwd(), names);
+		return;
+	}
+
+	if (command === 'remove') {
+		const names = args.filter((arg) => !arg.startsWith('--'));
+		if (!names.length) {
+			console.error('Usage: claude-workspace remove <name...> (operates on the current directory)');
+			process.exitCode = 1;
+			return;
+		}
+		await removeSkills(process.cwd(), names);
+		return;
+	}
+
+	if (command === 'doctor') {
+		await doctor(targetDirFrom(args));
+		return;
+	}
+
+	if (command === 'update') {
+		await updatePackage(targetDirFrom(args));
 		return;
 	}
 
@@ -570,12 +858,22 @@ export {
 	copySkill,
 	copyDomainSkill,
 	loadPreset,
+	listPresetNames,
 	ensureGitignore,
 	init,
+	installPreset,
+	writeWorkspaceManifest,
 	sync,
 	list,
+	doctor,
+	addSkills,
+	removeSkills,
+	updatePackage,
+	describeSkill,
+	listKnownNames,
 	SKILLS_DIR,
 	PRESETS_DIR,
+	TEMPLATES_DIR,
 	DOMAIN_DIRS,
 	EXTERNAL_TOOLS,
 };
