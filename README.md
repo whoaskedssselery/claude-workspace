@@ -26,9 +26,11 @@ yarn dlx claude-workspace init     # yarn
 bunx claude-workspace init         # bun
 ```
 
-If a plain `pnpm add -g claude-workspace` ever installs an unexpectedly old version, that's pnpm
-serving a stale local metadata cache, not this package — pin it explicitly to force a fresh
-resolve: `pnpm add -g claude-workspace@latest`.
+If `pnpm add -g claude-workspace` (even `@latest`) installs an older version than what's on npm,
+that's pnpm's own `minimumReleaseAge` policy deliberately holding back a very recently published
+version (a supply-chain-safety default, not a bug in this package) — `pnpm add -g
+claude-workspace@<exact-version>` bypasses it for that version immediately, or just wait a bit and
+`@latest` will pick it up once it's aged past the threshold.
 
 Already know what you want (CI, automation, repeat setup)? Skip the wizard by passing a preset name:
 
