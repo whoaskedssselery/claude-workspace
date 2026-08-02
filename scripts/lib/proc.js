@@ -55,7 +55,13 @@ export function runVisible(command, args, { cwd, timeout = DEFAULT_TIMEOUT_MS } 
 	return new Promise((resolve, reject) => {
 		const child = spawn(command, args, {
 			cwd,
-			shell: true,
+			// Windows only: resolves npx/npm's .cmd shims, which CreateProcess can't
+			// launch directly. On POSIX this is unnecessary *and* unsafe — shell:
+			// true with an args array joins them into one string with no escaping,
+			// so any shell metacharacter in an arg (a "(" in a test command, a ";"
+			// in a user-supplied URL) gets interpreted by /bin/sh instead of passed
+			// through literally.
+			shell: process.platform === 'win32',
 			stdio: 'inherit',
 			detached: process.platform !== 'win32',
 		});

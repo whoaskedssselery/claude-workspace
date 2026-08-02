@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { moveCursor, toggleAt, flattenGroups, digitIndex } from '../scripts/lib/prompt.js';
+import { moveCursor, toggleAt, flattenGroups, digitIndex, windowSlice } from '../scripts/lib/prompt.js';
 import { t, presetHint, supportedLanguages } from '../scripts/lib/i18n.js';
 import { bold, dim, isColorEnabled } from '../scripts/lib/colors.js';
 
@@ -69,6 +69,26 @@ describe('prompt: digitIndex', () => {
 		assert.equal(digitIndex('a', 10), null);
 		assert.equal(digitIndex('0', 10), null);
 		assert.equal(digitIndex(undefined, 10), null);
+	});
+});
+
+describe('prompt: windowSlice', () => {
+	test('shows everything when it already fits', () => {
+		assert.deepEqual(windowSlice(3, 1, 5), { start: 0, end: 3 });
+	});
+
+	test('keeps the cursor inside the window when the list is longer than the budget', () => {
+		const { start, end } = windowSlice(20, 15, 5);
+		assert.ok(15 >= start && 15 < end, `cursor 15 not within [${start}, ${end})`);
+		assert.equal(end - start, 5);
+	});
+
+	test('never scrolls the window past the end of the list', () => {
+		assert.deepEqual(windowSlice(10, 9, 4), { start: 6, end: 10 });
+	});
+
+	test('never scrolls the window before the start of the list', () => {
+		assert.deepEqual(windowSlice(10, 0, 4), { start: 0, end: 4 });
 	});
 });
 

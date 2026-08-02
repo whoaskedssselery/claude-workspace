@@ -55,27 +55,83 @@ function requireTTY() {
 }
 
 /**
+ * How many terminal rows a render() is allowed to use for its scrollable body
+ * (the part `windowSlice` below paginates), leaving room for `chromeLines`
+ * (subtitle/message/footer) plus a one-row safety margin. Without this, a
+ * render taller than what's left below the cursor forces the terminal to
+ * auto-scroll *while it's being written* — which breaks the relative
+ * moveCursor(-lineCount) redraw below: it can't move back to a start row
+ * that's already scrolled out of the buffer, so clearScreenDown clears the
+ * wrong region and old frames pile up in scrollback instead of being
+ * overwritten (reproduced as: every keypress appears to reprint the whole
+ * screen, and it's pinned to the bottom since new output keeps forcing the
+ * view back down).
+ */
+function terminalRowBudget(chromeLines) {
+	const rows = process.stdout.rows || 24;
+	return Math.max(3, rows - chromeLines - 1);
+}
+
+/** Slice `length` items down to `maxVisible`, keeping `cursor` in view. Returns { start, end } (end exclusive). */
+export function windowSlice(length, cursor, maxVisible) {
+	if (length <= maxVisible) return { start: 0, end: length };
+	let start = Math.max(0, cursor - Math.floor(maxVisible / 2));
+	start = Math.min(start, length - maxVisible);
+	return { start, end: start + maxVisible };
+}
+
+/**
  * Renders `render()`, then re-renders in place after each keypress, until
  * `handleKey` returns a value other than undefined (which becomes the
  * resolved result). Esc/Ctrl+C rejects with CancelledError.
+ *
+ * Erases its own last frame before resolving/rejecting (rather than leaving
+ * it on screen) so a multi-step wizard doesn't accumulate every previous
+ * step's full menu — that accumulated height is what eventually stops
+ * fitting the terminal and triggers the auto-scroll problem above, even for
+ * steps whose own render is short.
+ *
+ * Bounding this step's own render to `rows` (via terminalRowBudget) isn't
+ * enough by itself: whatever a *previous* step already left on screen above
+ * the cursor (banner text, an earlier step's own render) eats into the same
+ * fixed-height viewport, so there may be fewer rows actually free below the
+ * cursor than `rows` — confirmed live on a real 12-row terminal, where a
+ * render that fit in 12 rows on its own still triggered the same
+ * auto-scroll-mid-write corruption because 4-5 of those rows were already
+ * spoken for. Fixed by reserving `rows` blank lines up front (forcing
+ * whatever scrolling is needed to happen in one predictable jump) and
+ * moving back up to the top of that now-guaranteed-empty block before the
+ * first real draw — from that known position, a render bounded to `rows`
+ * can never again trigger a mid-write scroll for the rest of this step.
  */
 function runInteractive({ render, handleKey }) {
 	requireTTY();
 	return new Promise((resolve, reject) => {
 		let lineCount = 0;
 
+		function eraseLastFrame() {
+			if (lineCount === 0) return;
+			readline.moveCursor(process.stdout, 0, -lineCount);
+			readline.cursorTo(process.stdout, 0);
+			readline.clearScreenDown(process.stdout);
+			lineCount = 0;
+		}
+
+		function reserveFreshViewport() {
+			const rows = process.stdout.rows || 24;
+			process.stdout.write('\n'.repeat(rows));
+			readline.moveCursor(process.stdout, 0, -rows);
+		}
+
 		function draw() {
 			const output = render();
-			if (lineCount > 0) {
-				readline.moveCursor(process.stdout, 0, -lineCount);
-				readline.cursorTo(process.stdout, 0);
-				readline.clearScreenDown(process.stdout);
-			}
+			eraseLastFrame();
 			process.stdout.write(output + '\n');
 			lineCount = output.split('\n').length;
 		}
 
 		function cleanup() {
+			eraseLastFrame();
 			process.stdin.removeListener('keypress', onKeypress);
 			if (process.stdin.isTTY) process.stdin.setRawMode(false);
 			process.stdin.pause();
@@ -99,6 +155,7 @@ function runInteractive({ render, handleKey }) {
 		readline.emitKeypressEvents(process.stdin);
 		process.stdin.setRawMode(true);
 		process.stdin.resume();
+		reserveFreshViewport();
 		draw();
 		process.stdin.on('keypress', onKeypress);
 	});
@@ -112,8 +169,14 @@ function renderSubtitle(subtitle) {
 export async function select(message, choices, { subtitle, initialCursor = 0 } = {}) {
 	let cursor = initialCursor >= 0 && initialCursor < choices.length ? initialCursor : 0;
 	const render = () => {
-		const lines = [...renderSubtitle(subtitle), bold(message)];
-		choices.forEach((choice, i) => {
+		const header = [...renderSubtitle(subtitle), bold(message)];
+		const footer = ['', dim('  ↑/↓ move · 1-9 jump · enter select · esc cancel')];
+		const budget = terminalRowBudget(header.length + footer.length + 1);
+		const { start, end } = windowSlice(choices.length, cursor, budget);
+		const lines = [...header];
+		if (start > 0) lines.push(dim(`  ↑ ${start} more above`));
+		choices.slice(start, end).forEach((choice, offset) => {
+			const i = start + offset;
 			const focused = i === cursor;
 			const marker = focused ? cyan('❯') : ' ';
 			const number = dim(i < 9 ? `${i + 1}.` : ' ');
@@ -121,7 +184,8 @@ export async function select(message, choices, { subtitle, initialCursor = 0 } =
 			const hint = choice.hint ? dim(`  — ${choice.hint}`) : '';
 			lines.push(`  ${marker} ${number} ${label}${hint}`);
 		});
-		lines.push('', dim('  ↑/↓ move · 1-9 jump · enter select · esc cancel'));
+		if (end < choices.length) lines.push(dim(`  ↓ ${choices.length - end} more below`));
+		lines.push(...footer);
 		return lines.join('\n');
 	};
 	const handleKey = (key, str) => {
@@ -155,8 +219,17 @@ export async function checkbox(message, groups, { subtitle, initialSelected } = 
 		: new Set();
 
 	const render = () => {
-		const lines = [...renderSubtitle(subtitle), bold(message), ''];
-		for (const entry of renderEntries) {
+		const header = [...renderSubtitle(subtitle), bold(message), ''];
+		const footer = [
+			'',
+			dim('  ↑/↓ move · 1-9 jump+toggle · space toggle · a all · n none · enter confirm · esc cancel'),
+		];
+		const budget = terminalRowBudget(header.length + footer.length + 1);
+		const cursorPos = renderEntries.findIndex((entry) => entry.type === 'item' && entry.itemIndex === cursor);
+		const { start, end } = windowSlice(renderEntries.length, cursorPos < 0 ? 0 : cursorPos, budget);
+		const lines = [...header];
+		if (start > 0) lines.push(dim(`  ↑ ${start} more above`));
+		for (const entry of renderEntries.slice(start, end)) {
 			if (entry.type === 'header') {
 				lines.push(`  ${bold(underline(entry.title))}`);
 				continue;
@@ -170,10 +243,8 @@ export async function checkbox(message, groups, { subtitle, initialSelected } = 
 			const hint = item.hint ? dim(`  — ${item.hint}`) : '';
 			lines.push(`  ${marker} ${number} ${box} ${label}${hint}`);
 		}
-		lines.push(
-			'',
-			dim('  ↑/↓ move · 1-9 jump+toggle · space toggle · a all · n none · enter confirm · esc cancel')
-		);
+		if (end < renderEntries.length) lines.push(dim(`  ↓ ${renderEntries.length - end} more below`));
+		lines.push(...footer);
 		return lines.join('\n');
 	};
 
