@@ -10,13 +10,10 @@ import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 
 import { warn } from './log.js';
 import { GLOBAL_DIR } from './i18n.js';
-
-const execFileAsync = promisify(execFile);
+import { runVisible } from './proc.js';
 
 /**
  * ~/.claude/skills/ — Claude Code's own personal, cross-project skills
@@ -70,6 +67,25 @@ export function looksLikeSkillSource(name) {
 }
 
 /**
+ * Best-effort equality key for a remote source, so re-running "add" with a
+ * trivially different spelling of the same repo (a trailing ".git", a
+ * trailing slash, different case) is recognized as the same source instead
+ * of silently re-fetching it — found happening for real: "add
+ * https://github.com/x/y.git" then later "add https://github.com/x/y"
+ * fetched a second time instead of being skipped as already added.
+ * Doesn't attempt full SSH/HTTPS-remote equivalence (git@github.com:x/y.git
+ * vs. https://github.com/x/y) — that's a rarer case and not worth the
+ * complexity here.
+ */
+export function normalizeSkillSource(source) {
+	return source
+		.trim()
+		.replace(/\.git$/i, '')
+		.replace(/\/+$/, '')
+		.toLowerCase();
+}
+
+/**
  * Fetches a skill from an arbitrary repo via `npx skills add` — the CLI
  * from vercel-labs/skills (https://github.com/vercel-labs/skills, already
  * vendored from for react-best-practices and used for the "taste" external
@@ -98,12 +114,14 @@ export async function fetchRemoteSkill(targetDir, source, { global = false, skil
 	await fs.mkdir(skillsDestDir, { recursive: true });
 	const before = new Set(await fs.readdir(skillsDestDir));
 
-	console.log(`  fetching "${source}"${skill ? ` (skill: ${skill})` : ''} via npx skills${global ? ' (global)' : ''}...`);
+	console.log(
+		`  fetching "${source}"${skill ? ` (skill: ${skill})` : ''} via npx skills${global ? ' (global)' : ''} — output below is npx's own, may take a while the first time it needs to download the "skills" package...`
+	);
 	const args = ['skills', 'add', source, '--agent', 'claude-code', '--copy', '-y'];
 	if (global) args.push('-g');
 	if (skill) args.push('--skill', skill);
 	try {
-		await execFileAsync('npx', args, { cwd: targetDir, shell: true });
+		await runVisible('npx', args, { cwd: targetDir });
 	} catch (error) {
 		warn(`"npx ${args.join(' ')}" failed: ${error.message.split('\n')[0]}`);
 		warn(`try it yourself: npx ${args.join(' ')}`);

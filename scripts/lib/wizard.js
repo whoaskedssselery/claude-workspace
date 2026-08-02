@@ -216,6 +216,7 @@ export async function runWizard(targetDir) {
 			const groups = await buildFullCatalogGroups(lang);
 			const selected = await folderCheckbox(t(lang, 'selectSkillsForPreset'), groups, {
 				subtitle: t(lang, 'stepCustomSkills'),
+				doneLabel: t(lang, 'doneFolderPicking'),
 			});
 
 			const coreNames = new Set(await domainSkillNames('core'));
@@ -254,7 +255,10 @@ export async function runWizard(targetDir) {
 
 			const groups = await buildAdditionalGroups(lang, presetName, presetObj.skills ?? []);
 			const additional = groups.length
-				? await folderCheckbox(t(lang, 'additionalSkills'), groups, { subtitle: t(lang, 'stepAdditionalSkills') })
+				? await folderCheckbox(t(lang, 'additionalSkills'), groups, {
+						subtitle: t(lang, 'stepAdditionalSkills'),
+						doneLabel: t(lang, 'doneFolderPicking'),
+					})
 				: [];
 			presetObj = { ...presetObj, skills: [...(presetObj.skills ?? []), ...additional] };
 		}
@@ -278,8 +282,8 @@ export async function runWizard(targetDir) {
 		});
 
 		const proceed = await confirm(t(lang, 'continueQuestion'), {
-			yesLabel: t(lang, 'yes'),
-			noLabel: t(lang, 'no'),
+			yesLabel: t(lang, 'proceedYes'),
+			noLabel: t(lang, 'proceedNo'),
 			defaultYes: true,
 			subtitle: t(lang, 'stepConfirm'),
 		});

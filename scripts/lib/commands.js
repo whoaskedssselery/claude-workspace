@@ -10,11 +10,10 @@ import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 
 import { GLOBAL_PRESETS_DIR } from './i18n.js';
 import { warn } from './log.js';
+import { runVisible } from './proc.js';
 import {
 	SKILLS_DIR,
 	PRESETS_DIR,
@@ -42,10 +41,16 @@ import {
 	checkSkillStatus,
 	GITIGNORE_MARKER_START,
 } from './manifest.js';
-import { looksLikeSkillSource, fetchRemoteSkill, listGlobalSkills, forgetGlobalSkill, GLOBAL_CLAUDE_SKILLS_DIR } from './remote.js';
+import {
+	looksLikeSkillSource,
+	normalizeSkillSource,
+	fetchRemoteSkill,
+	listGlobalSkills,
+	forgetGlobalSkill,
+	GLOBAL_CLAUDE_SKILLS_DIR,
+} from './remote.js';
 import { PACKAGE_MANAGER_UPDATE_COMMANDS, detectPackageManager, isEphemeralRun } from './pm.js';
 
-const execFileAsync = promisify(execFile);
 const __filename = fileURLToPath(import.meta.url);
 
 /**
@@ -82,6 +87,10 @@ export async function installPreset(preset, presetName, targetDir, { withExterna
 		// not just this package's own catalog — so a custom preset can bundle
 		// "always pull in this URL" alongside catalog skills.
 		if (looksLikeSkillSource(name)) {
+			if (installedRemote.some((r) => normalizeSkillSource(r.source) === normalizeSkillSource(name))) {
+				warn(`"${name}" was already fetched from an equivalent source — skipped`);
+				continue;
+			}
 			const added = await fetchRemoteSkill(targetDir, name);
 			if (!added.length) {
 				warn(`nothing new appeared in .claude/skills/ from "${name}" — not recorded`);
@@ -269,11 +278,16 @@ export async function doctor(targetDir) {
  * (they're just copied from the installed npm package on `init`/`sync`).
  */
 async function addGlobalSkills(names, skill) {
+	const existing = await listGlobalSkills();
 	for (const name of names) {
 		if (!looksLikeSkillSource(name)) {
 			warn(
 				`"${name}" — global install only takes a URL/repo source. This package's own skills are already available in every project without installing them anywhere.`
 			);
+			continue;
+		}
+		if (existing.some((e) => normalizeSkillSource(e.source) === normalizeSkillSource(name))) {
+			warn(`"${name}" was already installed globally from an equivalent source — skipped`);
 			continue;
 		}
 		const added = await fetchRemoteSkill(process.cwd(), name, { global: true, skill });
@@ -309,6 +323,10 @@ export async function addSkills(targetDir, names, { global = false, skill = null
 
 	for (const name of names) {
 		if (looksLikeSkillSource(name)) {
+			if (remote.some((r) => normalizeSkillSource(r.source) === normalizeSkillSource(name))) {
+				warn(`"${name}" was already added from an equivalent source — skipped`);
+				continue;
+			}
 			const added = await fetchRemoteSkill(targetDir, name, { skill });
 			if (!added.length) {
 				warn(`nothing new appeared in .claude/skills/ from "${name}" — not recorded`);
@@ -420,7 +438,7 @@ async function updatePackage(targetDir) {
 		const { command, args } = PACKAGE_MANAGER_UPDATE_COMMANDS[detectPackageManager(realScriptPath)];
 		console.log(`\nUpdating the global claude-workspace package (${command} ${args.join(' ')})...`);
 		try {
-			await execFileAsync(command, args, { shell: true });
+			await runVisible(command, args);
 			console.log('Package updated.');
 		} catch (error) {
 			warn(`Could not update the global package: ${error.message.split('\n')[0]}`);

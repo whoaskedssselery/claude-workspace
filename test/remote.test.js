@@ -11,9 +11,14 @@ import path from 'node:path';
 const fakeHome = mkdtempSync(path.join(os.tmpdir(), 'claude-workspace-remote-home-'));
 process.env.CLAUDE_WORKSPACE_HOME = fakeHome;
 
-const { looksLikeSkillSource, listGlobalSkills, recordGlobalSkill, forgetGlobalSkill, GLOBAL_CLAUDE_SKILLS_DIR } = await import(
-	'../scripts/workspace.js'
-);
+const {
+	looksLikeSkillSource,
+	normalizeSkillSource,
+	listGlobalSkills,
+	recordGlobalSkill,
+	forgetGlobalSkill,
+	GLOBAL_CLAUDE_SKILLS_DIR,
+} = await import('../scripts/workspace.js');
 
 after(() => {
 	rmSync(fakeHome, { recursive: true, force: true });
@@ -29,6 +34,27 @@ describe('looksLikeSkillSource', () => {
 	test('false for a plain catalog-style name', () => {
 		assert.equal(looksLikeSkillSource('react-best-practices'), false);
 		assert.equal(looksLikeSkillSource('commit-discipline'), false);
+	});
+});
+
+describe('normalizeSkillSource', () => {
+	test('treats a trailing .git and a trailing slash as equivalent', () => {
+		// Real bug this guards against: "add https://github.com/x/y.git" then
+		// later "add https://github.com/x/y" re-fetched instead of being
+		// recognized as the same source and skipped.
+		const a = normalizeSkillSource('https://github.com/obra/superpowers.git');
+		const b = normalizeSkillSource('https://github.com/obra/superpowers');
+		const c = normalizeSkillSource('https://github.com/obra/superpowers/');
+		assert.equal(a, b);
+		assert.equal(b, c);
+	});
+
+	test('is case-insensitive', () => {
+		assert.equal(normalizeSkillSource('Owner/Repo'), normalizeSkillSource('owner/repo'));
+	});
+
+	test('different repos stay different', () => {
+		assert.notEqual(normalizeSkillSource('owner/repo-a'), normalizeSkillSource('owner/repo-b'));
 	});
 });
 

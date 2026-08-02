@@ -20,8 +20,10 @@ import {
 	ensureGitignore,
 	init,
 	writeClaudeMd,
+	writeWorkspaceManifest,
 	encodeRemoteList,
 	decodeRemoteList,
+	addSkills,
 	packageVersion,
 	sync,
 	doctor,
@@ -541,6 +543,38 @@ describe('sync', () => {
 		try {
 			await assert.rejects(() => sync(dir), /No \.claude\/workspace\.yaml found/);
 		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe('addSkills', () => {
+	test('skips a remote source already recorded under an equivalent spelling, without touching the network', async () => {
+		// Real bug: "add https://github.com/x/y.git" recorded "y", then later
+		// "add https://github.com/x/y" (no .git) re-ran the whole fetch instead
+		// of recognizing it as the same source and skipping — this asserts the
+		// second call never gets past the pre-check by using a source that
+		// would error immediately if fetchRemoteSkill were actually invoked
+		// (no "skills" package reachable/relevant here), and confirming the
+		// workspace.yaml's remote: list is untouched either way.
+		const dir = tmpDir();
+		const originalWarn = console.warn;
+		const warnings = [];
+		console.warn = (msg) => warnings.push(String(msg));
+		try {
+			await writeWorkspaceManifest(dir, 'project', ['commit-discipline'], [], [], [
+				{ name: 'writing-plans', source: 'https://github.com/obra/superpowers.git' },
+			]);
+			await addSkills(dir, ['https://github.com/obra/superpowers']);
+
+			assert.ok(
+				warnings.some((w) => w.includes('already added from an equivalent source')),
+				'skipped via the pre-check, not by attempting (and failing) a real fetch'
+			);
+			const workspaceYaml = await fs.readFile(path.join(dir, '.claude', 'workspace.yaml'), 'utf8');
+			assert.equal(workspaceYaml.match(/writing-plans=/g)?.length, 1, 'not duplicated');
+		} finally {
+			console.warn = originalWarn;
 			rmSync(dir, { recursive: true, force: true });
 		}
 	});

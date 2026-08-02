@@ -7,13 +7,10 @@ import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 
 import { GLOBAL_PRESETS_DIR } from './i18n.js';
 import { warn } from './log.js';
-
-const execFileAsync = promisify(execFile);
+import { runVisible } from './proc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(__dirname, '..', '..');
@@ -132,11 +129,11 @@ export function suggestName(name, knownNames) {
  * (network down, tool not installed, etc.) rather than aborting `init`.
  */
 export async function installExternalTool(name, tool, cwd) {
-	console.log(`  installing "${name}" (${tool.url})`);
+	console.log(`  installing "${name}" (${tool.url}) — output below is the installer's own, may take a while on a cold cache`);
 	for (const step of tool.steps) {
 		console.log(`    $ ${step.command} ${step.args.join(' ')}`);
 		try {
-			await execFileAsync(step.command, step.args, { cwd, shell: true });
+			await runVisible(step.command, step.args, { cwd });
 		} catch (error) {
 			warn(`auto-install of "${name}" failed: ${error.message.split('\n')[0]}`);
 			warn(`install it yourself: ${tool.manualInstall}`);

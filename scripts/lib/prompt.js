@@ -209,7 +209,7 @@ export async function checkbox(message, groups, { subtitle, initialSelected } = 
  * `checkbox` takes. Returns the flat array of all selected values across
  * every folder, in catalog order (not selection order).
  */
-export async function folderCheckbox(message, groups, { subtitle } = {}) {
+export async function folderCheckbox(message, groups, { subtitle, doneLabel = 'Done — continue' } = {}) {
 	const selected = new Set();
 	let folderCursor = 0;
 
@@ -219,7 +219,7 @@ export async function folderCheckbox(message, groups, { subtitle } = {}) {
 			const label = group.title ?? `Skills ${i + 1}`;
 			return { label: `${label}  ${count ? green(`(${count} selected)`) : dim('(none selected)')}`, value: i };
 		});
-		folderChoices.push({ label: green(`✓ ${message}`), value: '__done__' });
+		folderChoices.push({ label: green(`✓ ${doneLabel}`), value: '__done__' });
 
 		const choice = await select(message, folderChoices, { subtitle, initialCursor: folderCursor });
 		if (choice === '__done__') break;

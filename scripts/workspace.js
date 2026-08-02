@@ -308,6 +308,7 @@ export {
 
 export {
 	looksLikeSkillSource,
+	normalizeSkillSource,
 	fetchRemoteSkill,
 	listGlobalSkills,
 	recordGlobalSkill,
