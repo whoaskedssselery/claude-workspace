@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFile } from 'node:child_process';
@@ -876,8 +876,24 @@ async function main() {
 // scripts/workspace.js ...` or the `claude-workspace` bin) — not when it's
 // imported by the test suite, which needs the functions below without
 // triggering argv parsing or process.exit.
-const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isMain) {
+//
+// process.argv[1] is compared against the *resolved* real path, not the raw
+// one: Node resolves symlinks when computing import.meta.url for the entry
+// module (preserveSymlinks defaults to false), but never touches argv[1]
+// itself. Package managers that install global bins as symlinks into a
+// content-addressable store (pnpm's is the common case) make argv[1] and
+// import.meta.url differ even though this file genuinely is the entrypoint
+// — without resolving here, the CLI silently does nothing under pnpm.
+function isEntryPoint() {
+	if (!process.argv[1]) return false;
+	try {
+		return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+	} catch {
+		return false;
+	}
+}
+
+if (isEntryPoint()) {
 	main().catch((error) => {
 		console.error(`\nError: ${error.message}`);
 		process.exitCode = 1;
