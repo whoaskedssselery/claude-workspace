@@ -11,21 +11,24 @@ Prepare a project for a specific way of working — learning, day-to-day project
 assignment, a redesign, contributing to someone else's repo — with a single command:
 
 ```bash
-npx claude-workspace init <preset>
-```
-
-Or with no preset name, in an interactive terminal, for a step-by-step wizard instead (pick a
-preset, pick additional skills, confirm) — see [Interactive wizard](#interactive-wizard):
-
-```bash
 npx claude-workspace init
 ```
 
-Works the same way installed globally, if you'd rather not type `npx` every time:
+That launches the [interactive wizard](#interactive-wizard) — pick (or build) a preset, pick
+additional skills, confirm — which is the primary way to use this tool. Prefer scripting it
+instead (CI, automation, or you already know exactly what you want)? Pass a preset name and flags
+directly, no prompts:
+
+```bash
+npx claude-workspace init <preset>
+```
+
+Both work the same way installed globally, if you'd rather not type `npx` every time:
 
 ```bash
 npm install -g claude-workspace
-claude-workspace init <preset>
+claude-workspace init          # wizard
+claude-workspace init <preset> # scriptable
 ```
 
 This installs, into the current directory:
@@ -158,17 +161,28 @@ it prints the manual command instead and keeps going.
 
 ## Interactive wizard
 
-`claude-workspace init` with no preset name, run in an interactive terminal, walks through the same
-decisions step by step instead of requiring flags up front:
+**This is the primary way to use the tool.** Run `init` with no preset name in an interactive
+terminal:
+
+```bash
+npx claude-workspace init
+```
+
+Flags and preset names — everything documented above — are the scriptable/advanced path for CI,
+automation, or when you already know exactly what you want; the wizard is what you reach for day
+to day.
+
+It walks through the same decisions step by step instead of requiring flags up front, each screen
+tagged with which step you're on:
 
 1. **Language** — Russian or English. Remembered in `~/.claude-workspace/config.json`, so it only
-   asks once.
+   asks once, ever.
 2. **Preset** — pick a built-in one, a custom preset you saved before, or "build a custom preset."
-3. **Additional skills** — a checkbox list (space to toggle, enter to confirm), split into domain
-   skills, relevant format variants (only `assignment-defend` for `assignment`, only `spike` for
-   `project` — not both, always), and external tools.
+3. **Additional skills** — a checkbox list split into domain skills, relevant format variants
+   (only `assignment-defend` for `assignment`, only `spike` for `project` — never both), and
+   external tools, each with a one-line hint pulled straight from its `SKILL.md`.
 4. If any external tools were selected: **install them now, or just show the commands?**
-5. **Confirm** — a summary of exactly what will be created, then proceeds (or cancels).
+5. **Confirm** — a colored summary of exactly what will be created, then proceeds (or cancels).
 
 Building a custom preset instead walks the full catalog (every `skills/` folder plus external
 tools) and, at the end, asks whether to **save it globally** to
@@ -176,9 +190,16 @@ tools) and, at the end, asks whether to **save it globally** to
 non-interactively afterward too, exactly like a built-in preset (see
 [Custom presets](#custom-presets)).
 
-The wizard needs a real TTY (raw-mode keyboard input) — running it from a script, CI, or with
-stdin piped from a file falls back to a clear error telling you to pass a preset name instead. All
-of it is zero-dependency: no `inquirer`, just Node's built-in `readline`.
+**Keyboard:** arrow keys (or `j`/`k`) to move, `space` to toggle a checkbox item, digits `1`-`9` to
+jump straight to (and, in checkboxes, toggle) one of the first nine items, `a`/`n` to select
+all/none in a checkbox, `enter` to confirm, `esc`/`Ctrl+C` to cancel at any point without writing
+anything.
+
+The whole thing is zero-dependency — no `inquirer`, just Node's built-in `readline` plus plain ANSI
+codes for the color/bold/dim styling (automatically off when output isn't a real terminal, or when
+`NO_COLOR` is set — https://no-color.org). It needs a real TTY for the raw-mode keyboard input;
+running it from a script, CI, or with stdin piped from a file falls back to a clear error telling
+you to pass a preset name instead.
 
 ## Custom presets
 

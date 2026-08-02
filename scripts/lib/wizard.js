@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 
 import { select, checkbox, confirm, textInput, CancelledError } from './prompt.js';
+import { bold, cyan, green, dim } from './colors.js';
 import { loadConfig, saveConfig, t, presetHint, supportedLanguages, GLOBAL_PRESETS_DIR } from './i18n.js';
 import {
 	PRESETS_DIR,
@@ -95,30 +96,43 @@ async function buildFullCatalogGroups(lang) {
 	return groups;
 }
 
+function printBanner() {
+	console.log(`\n${bold(cyan(`  ${t('en', 'wizardTitle')}`))}`);
+	console.log(dim('  ────────────────────────────'));
+}
+
 async function resolveLanguage() {
 	const config = await loadConfig();
 	if (config.language && supportedLanguages().includes(config.language)) {
 		return config.language;
 	}
-	const lang = await select('Choose interface language / Выберите язык интерфейса', [
-		{ label: 'Русский', value: 'ru' },
-		{ label: 'English', value: 'en' },
-	]);
+	const lang = await select(
+		'Choose interface language / Выберите язык интерфейса',
+		[
+			{ label: 'Русский', value: 'ru' },
+			{ label: 'English', value: 'en' },
+		],
+		{ subtitle: 'Language / Язык' }
+	);
 	await saveConfig({ ...config, language: lang });
 	return lang;
 }
 
+function summaryLine(label, value, empty) {
+	const shown = value.length ? green(value.join(', ')) : dim(empty);
+	return `  ${dim(label + ':')} ${shown}`;
+}
+
 function printSummary(lang, { presetName, core, skills, external }) {
-	console.log(`\n${t(lang, 'summaryTitle')}\n`);
-	console.log(`  ${t(lang, 'summaryPreset')}: ${presetName}`);
-	console.log(`  core: ${core.join(', ') || t(lang, 'none')}`);
-	console.log(`  ${t(lang, 'summarySkills')}: ${skills.join(', ') || t(lang, 'none')}`);
-	console.log(`  ${t(lang, 'summaryExternal')}: ${external.join(', ') || t(lang, 'none')}`);
-	console.log(`\n  ${t(lang, 'summaryFiles')}:`);
-	console.log('  • .claude/skills/');
-	console.log('  • .claude/workspace.yaml');
-	console.log('  • CLAUDE.md');
-	console.log('  • .gitignore');
+	console.log(`\n${bold(t(lang, 'summaryTitle'))}\n`);
+	console.log(summaryLine(t(lang, 'summaryPreset'), [presetName], ''));
+	console.log(summaryLine('core', core, t(lang, 'none')));
+	console.log(summaryLine(t(lang, 'summarySkills'), skills, t(lang, 'none')));
+	console.log(summaryLine(t(lang, 'summaryExternal'), external, t(lang, 'none')));
+	console.log(`\n  ${dim(t(lang, 'summaryFiles') + ':')}`);
+	for (const file of ['.claude/skills/', '.claude/workspace.yaml', 'CLAUDE.md', '.gitignore']) {
+		console.log(`  ${green('✓')} ${file}`);
+	}
 	console.log('');
 }
 
@@ -142,8 +156,10 @@ export { buildAdditionalGroups, buildFullCatalogGroups, saveCustomPreset };
 
 export async function runWizard(targetDir) {
 	let lang;
+	printBanner();
 	try {
 		lang = await resolveLanguage();
+		console.log(`\n${dim(t(lang, 'wizardTagline'))}`);
 
 		const builtIn = await listPresetNames(PRESETS_DIR);
 		const custom = await listPresetNames(GLOBAL_PRESETS_DIR);
@@ -154,7 +170,9 @@ export async function runWizard(targetDir) {
 			{ label: t(lang, 'createCustomPreset'), value: '__custom__' },
 		];
 
-		const presetChoice = await select(t(lang, 'choosePreset'), presetChoices);
+		const presetChoice = await select(t(lang, 'choosePreset'), presetChoices, {
+			subtitle: t(lang, 'stepPreset'),
+		});
 
 		let presetName;
 		let presetObj;
@@ -162,7 +180,9 @@ export async function runWizard(targetDir) {
 		if (presetChoice === '__custom__') {
 			presetName = await textInput(t(lang, 'customPresetName'), { default: 'my-custom' });
 			const groups = await buildFullCatalogGroups(lang);
-			const selected = await checkbox(t(lang, 'selectSkillsForPreset'), groups);
+			const selected = await checkbox(t(lang, 'selectSkillsForPreset'), groups, {
+				subtitle: t(lang, 'stepCustomSkills'),
+			});
 
 			const coreNames = new Set(await domainSkillNames('core'));
 			const core = selected.filter((name) => coreNames.has(name));
@@ -172,6 +192,7 @@ export async function runWizard(targetDir) {
 				yesLabel: t(lang, 'saveGloballyYes', { name: presetName }),
 				noLabel: t(lang, 'saveGloballyNo'),
 				defaultYes: true,
+				subtitle: t(lang, 'stepSaveGlobally'),
 			});
 			if (save) await saveCustomPreset(presetName, core, skills);
 
@@ -181,7 +202,9 @@ export async function runWizard(targetDir) {
 			presetObj = await loadPreset(presetName);
 
 			const groups = await buildAdditionalGroups(lang, presetName, presetObj.skills ?? []);
-			const additional = groups.length ? await checkbox(t(lang, 'additionalSkills'), groups) : [];
+			const additional = groups.length
+				? await checkbox(t(lang, 'additionalSkills'), groups, { subtitle: t(lang, 'stepAdditionalSkills') })
+				: [];
 			presetObj = { ...presetObj, skills: [...(presetObj.skills ?? []), ...additional] };
 		}
 
@@ -192,6 +215,7 @@ export async function runWizard(targetDir) {
 				yesLabel: t(lang, 'yes'),
 				noLabel: t(lang, 'no'),
 				defaultYes: true,
+				subtitle: t(lang, 'stepExternalInstall'),
 			});
 		}
 
@@ -206,16 +230,18 @@ export async function runWizard(targetDir) {
 			yesLabel: t(lang, 'yes'),
 			noLabel: t(lang, 'no'),
 			defaultYes: true,
+			subtitle: t(lang, 'stepConfirm'),
 		});
 		if (!proceed) {
-			console.log(`\n${t(lang, 'cancelled')}\n`);
+			console.log(`\n${dim(t(lang, 'cancelled'))}\n`);
 			return;
 		}
 
 		await installPreset(presetObj, presetName, targetDir, { withExternal: installExternalNow });
+		console.log(bold(green(`${t(lang, 'done')}\n`)));
 	} catch (error) {
 		if (error instanceof CancelledError) {
-			console.log(`\n${lang ? t(lang, 'cancelled') : 'Cancelled.'}\n`);
+			console.log(`\n${dim(lang ? t(lang, 'cancelled') : 'Cancelled.')}\n`);
 			return;
 		}
 		throw error;

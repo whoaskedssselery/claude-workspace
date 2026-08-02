@@ -1,4 +1,5 @@
 import readline from 'node:readline';
+import { bold, dim, cyan, green, underline } from './colors.js';
 
 /**
  * Pure, unit-testable cursor/selection logic, kept separate from the raw
@@ -29,6 +30,13 @@ export function flattenGroups(groups) {
 		}
 	}
 	return { items, renderEntries };
+}
+
+/** '1'-'9' -> 0-based index, if it's within range; used for the numbered quick-jump/select shortcut. Anything else -> null. */
+export function digitIndex(str, length) {
+	if (typeof str !== 'string' || !/^[1-9]$/.test(str)) return null;
+	const index = Number(str) - 1;
+	return index < length ? index : null;
 }
 
 export class CancelledError extends Error {
@@ -96,19 +104,29 @@ function runInteractive({ render, handleKey }) {
 	});
 }
 
+function renderSubtitle(subtitle) {
+	return subtitle ? [dim(subtitle), ''] : [];
+}
+
 /** Single-select arrow-key menu. `choices`: [{ label, value, hint }]. */
-export async function select(message, choices) {
+export async function select(message, choices, { subtitle } = {}) {
 	let cursor = 0;
 	const render = () => {
-		const lines = [message];
+		const lines = [...renderSubtitle(subtitle), bold(message)];
 		choices.forEach((choice, i) => {
-			const marker = i === cursor ? '❯' : ' ';
-			const hint = choice.hint ? `  — ${choice.hint}` : '';
-			lines.push(`  ${marker} ${choice.label}${hint}`);
+			const focused = i === cursor;
+			const marker = focused ? cyan('❯') : ' ';
+			const number = dim(i < 9 ? `${i + 1}.` : ' ');
+			const label = focused ? bold(choice.label) : choice.label;
+			const hint = choice.hint ? dim(`  — ${choice.hint}`) : '';
+			lines.push(`  ${marker} ${number} ${label}${hint}`);
 		});
+		lines.push('', dim('  ↑/↓ move · 1-9 jump · enter select · esc cancel'));
 		return lines.join('\n');
 	};
-	const handleKey = (key) => {
+	const handleKey = (key, str) => {
+		const jump = digitIndex(str, choices.length);
+		if (jump !== null) return choices[jump].value;
 		if (key.name === 'up' || key.name === 'k') cursor = moveCursor(cursor, -1, choices.length);
 		else if (key.name === 'down' || key.name === 'j') cursor = moveCursor(cursor, 1, choices.length);
 		else if (key.name === 'return') return choices[cursor].value;
@@ -118,10 +136,10 @@ export async function select(message, choices) {
 }
 
 /** Yes/no arrow-key confirm, localized labels supplied by the caller. */
-export async function confirm(message, { yesLabel = 'Yes', noLabel = 'No', defaultYes = true } = {}) {
+export async function confirm(message, { yesLabel = 'Yes', noLabel = 'No', defaultYes = true, subtitle } = {}) {
 	const yes = { label: yesLabel, value: true };
 	const no = { label: noLabel, value: false };
-	return select(message, defaultYes ? [yes, no] : [no, yes]);
+	return select(message, defaultYes ? [yes, no] : [no, yes], { subtitle });
 }
 
 /**
@@ -129,32 +147,46 @@ export async function confirm(message, { yesLabel = 'Yes', noLabel = 'No', defau
  * headers. `groups`: [{ title, items: [{ label, value, hint }] }].
  * Returns the array of selected `value`s.
  */
-export async function checkbox(message, groups) {
+export async function checkbox(message, groups, { subtitle } = {}) {
 	const { items, renderEntries } = flattenGroups(groups);
 	let cursor = 0;
 	let selected = new Set();
 
 	const render = () => {
-		const lines = [message, ''];
+		const lines = [...renderSubtitle(subtitle), bold(message), ''];
 		for (const entry of renderEntries) {
 			if (entry.type === 'header') {
-				lines.push(`  ${entry.title}`);
+				lines.push(`  ${bold(underline(entry.title))}`);
 				continue;
 			}
 			const item = items[entry.itemIndex];
-			const marker = entry.itemIndex === cursor ? '❯' : ' ';
-			const box = selected.has(entry.itemIndex) ? '[x]' : '[ ]';
-			const hint = item.hint ? `  — ${item.hint}` : '';
-			lines.push(`  ${marker} ${box} ${item.label}${hint}`);
+			const focused = entry.itemIndex === cursor;
+			const marker = focused ? cyan('❯') : ' ';
+			const box = selected.has(entry.itemIndex) ? green('[x]') : '[ ]';
+			const number = dim(entry.itemIndex < 9 ? `${entry.itemIndex + 1}.` : ' ');
+			const label = focused ? bold(item.label) : item.label;
+			const hint = item.hint ? dim(`  — ${item.hint}`) : '';
+			lines.push(`  ${marker} ${number} ${box} ${label}${hint}`);
 		}
-		lines.push('', '  (up/down move, space toggle, enter confirm, esc cancel)');
+		lines.push(
+			'',
+			dim('  ↑/↓ move · 1-9 jump+toggle · space toggle · a all · n none · enter confirm · esc cancel')
+		);
 		return lines.join('\n');
 	};
 
-	const handleKey = (key) => {
+	const handleKey = (key, str) => {
+		const jump = digitIndex(str, items.length);
+		if (jump !== null) {
+			cursor = jump;
+			selected = toggleAt(selected, cursor);
+			return undefined;
+		}
 		if (key.name === 'up' || key.name === 'k') cursor = moveCursor(cursor, -1, items.length);
 		else if (key.name === 'down' || key.name === 'j') cursor = moveCursor(cursor, 1, items.length);
 		else if (key.name === 'space') selected = toggleAt(selected, cursor);
+		else if (str === 'a') selected = new Set(items.map((_, i) => i));
+		else if (str === 'n') selected = new Set();
 		else if (key.name === 'return') return [...selected].sort((a, b) => a - b).map((i) => items[i].value);
 		return undefined;
 	};
@@ -166,8 +198,8 @@ export async function checkbox(message, groups) {
 export function textInput(message, { default: defaultValue = '' } = {}) {
 	return new Promise((resolve) => {
 		const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-		const suffix = defaultValue ? ` (${defaultValue})` : '';
-		rl.question(`${message}${suffix}: `, (answer) => {
+		const suffix = defaultValue ? dim(` (${defaultValue})`) : '';
+		rl.question(`${bold(message)}${suffix}: `, (answer) => {
 			rl.close();
 			resolve(answer.trim() || defaultValue);
 		});

@@ -678,12 +678,13 @@ Usage:
   claude-workspace update [targetDir]
 
 Commands:
-  init            With no preset name and an interactive terminal, runs a
-                  step-by-step wizard: pick (or build) a preset, pick
-                  additional skills, confirm, done. With a preset name, runs
-                  non-interactively as before — install a preset's skills,
-                  workspace manifest and CLAUDE.md (targetDir defaults to the
-                  current directory).
+  init            The primary way to use this tool: with no preset name, in
+                  an interactive terminal, runs the step-by-step wizard —
+                  pick (or build) a preset, pick additional skills, confirm,
+                  done. With a preset name, runs non-interactively instead —
+                  the scriptable/advanced path: install a preset's skills,
+                  workspace manifest and CLAUDE.md directly from flags
+                  (targetDir defaults to the current directory).
 
                   --with=<name,name,...>  also install these skills/tools,
                     from ANY domain (skills/{frontend,design,backend,...}) or

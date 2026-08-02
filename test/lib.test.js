@@ -1,8 +1,9 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { moveCursor, toggleAt, flattenGroups } from '../scripts/lib/prompt.js';
+import { moveCursor, toggleAt, flattenGroups, digitIndex } from '../scripts/lib/prompt.js';
 import { t, presetHint, supportedLanguages } from '../scripts/lib/i18n.js';
+import { bold, dim, isColorEnabled } from '../scripts/lib/colors.js';
 
 describe('prompt: moveCursor', () => {
 	test('wraps forward past the end', () => {
@@ -54,6 +55,34 @@ describe('prompt: flattenGroups', () => {
 	});
 });
 
+describe('prompt: digitIndex', () => {
+	test('maps "1".."9" to 0-based indices', () => {
+		assert.equal(digitIndex('1', 10), 0);
+		assert.equal(digitIndex('9', 10), 8);
+	});
+
+	test('returns null when the digit is past the list length', () => {
+		assert.equal(digitIndex('5', 3), null);
+	});
+
+	test('returns null for non-digit input', () => {
+		assert.equal(digitIndex('a', 10), null);
+		assert.equal(digitIndex('0', 10), null);
+		assert.equal(digitIndex(undefined, 10), null);
+	});
+});
+
+describe('colors', () => {
+	test('wrapping is a no-op (colors disabled) outside a TTY, as in this test run', () => {
+		// node --test runs with stdout piped, so process.stdout.isTTY is
+		// falsy here — exactly the case colors.js is meant to detect and
+		// stay plain for.
+		assert.equal(isColorEnabled, false);
+		assert.equal(bold('x'), 'x');
+		assert.equal(dim('x'), 'x');
+	});
+});
+
 describe('i18n: t', () => {
 	test('returns the string for a known language/key', () => {
 		assert.equal(t('en', 'yes'), 'Yes');
@@ -87,5 +116,23 @@ describe('i18n: presetHint / supportedLanguages', () => {
 	test('supportedLanguages includes en and ru', () => {
 		assert.ok(supportedLanguages().includes('en'));
 		assert.ok(supportedLanguages().includes('ru'));
+	});
+
+	test('every wizard step tag resolves to a real (non-key-echo) string in both languages', () => {
+		const stepKeys = [
+			'stepLanguage',
+			'stepPreset',
+			'stepAdditionalSkills',
+			'stepCustomName',
+			'stepCustomSkills',
+			'stepSaveGlobally',
+			'stepExternalInstall',
+			'stepConfirm',
+		];
+		for (const lang of supportedLanguages()) {
+			for (const key of stepKeys) {
+				assert.notEqual(t(lang, key), key, `${lang}/${key}`);
+			}
+		}
 	});
 });
