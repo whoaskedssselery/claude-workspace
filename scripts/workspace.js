@@ -17,7 +17,7 @@ import { realpathSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { init, sync, list, doctor, addSkills, removeSkills, updatePackage } from './lib/commands.js';
-import { packageVersion } from './lib/catalog.js';
+import { packageVersion, fetchLatestVersion } from './lib/catalog.js';
 
 const COMING_SOON = new Set([]);
 
@@ -116,7 +116,10 @@ Commands:
                   then "sync". Safe under npx/pnpm dlx (detected and
                   skipped — nothing global to update there).
 
-  version         Print the installed claude-workspace version.
+  version         Print the installed claude-workspace version. Also checks
+                  npm's "latest" tag (best-effort, ~2.5s timeout, never
+                  fails or hangs the command) and prints an update notice
+                  with the command to run if a newer one exists.
 
 Custom presets: the init wizard can build one on the fly and save it either
 to .claude-workspace/presets/<name>.yaml in the current project (commit it —
@@ -141,7 +144,13 @@ async function main() {
 	}
 
 	if (command === 'version' || command === '--version' || command === '-v') {
-		console.log(await packageVersion());
+		const current = await packageVersion();
+		console.log(current);
+		const latest = await fetchLatestVersion();
+		if (latest && latest !== current) {
+			console.log(`\nA newer version is available: ${latest} (you have ${current}).`);
+			console.log('Update with: claude-workspace update');
+		}
 		return;
 	}
 
@@ -287,6 +296,7 @@ export {
 	describeSkill,
 	listKnownNames,
 	packageVersion,
+	fetchLatestVersion,
 	SKILLS_DIR,
 	PRESETS_DIR,
 	TEMPLATES_DIR,

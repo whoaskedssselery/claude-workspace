@@ -134,6 +134,10 @@ those with their own CLI).
 (`<!-- claude-workspace:start/end -->`) — `sync` only refreshes what's inside the markers, so
 anything you write outside them is never touched.
 
+`claude-workspace version` prints the installed version and, like npm's own "a newer version is
+available" notice, checks npm's `latest` tag and tells you if there's a newer one — best-effort,
+~2.5s timeout, never fails or hangs the command if the network isn't cooperating.
+
 ## Full command reference
 
 ```bash

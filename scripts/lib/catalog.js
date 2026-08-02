@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import https from 'node:https';
 
 import { GLOBAL_PRESETS_DIR } from './i18n.js';
 import { warn } from './log.js';
@@ -30,6 +31,54 @@ export async function packageVersion() {
 }
 
 /**
+ * The version currently on npm's `latest` tag, for "claude-workspace
+ * version" to compare itself against — same idea as npm's own "a newer
+ * version of npm is available" notice. Best-effort and bounded: resolves
+ * `null` (never throws, never hangs the command) on any failure — no
+ * network, registry down, slow connection past `timeout`. This is an
+ * optional nicety on top of the actual version number, not something
+ * worth blocking or failing the command over.
+ */
+export function fetchLatestVersion({ timeout = 2500, url = 'https://registry.npmjs.org/claude-workspace/latest' } = {}) {
+	return new Promise((resolve) => {
+		let settled = false;
+		const done = (value) => {
+			if (settled) return;
+			settled = true;
+			resolve(value);
+		};
+
+		// https.get throws synchronously for a malformed URL rather than
+		// emitting 'error' — guard it too, so this keeps its promise of never
+		// throwing regardless of what "url" turns out to be.
+		let req;
+		try {
+			req = https.get(url, { timeout }, (res) => {
+				let data = '';
+				res.on('data', (chunk) => (data += chunk));
+				res.on('end', () => {
+					try {
+						done(JSON.parse(data).version ?? null);
+					} catch {
+						done(null);
+					}
+				});
+			});
+		} catch {
+			done(null);
+			return;
+		}
+		req.on('timeout', () => req.destroy());
+		req.on('error', () => done(null));
+
+		// Backstop in case destroy() doesn't trigger 'error' for some reason —
+		// this must never be able to hang the command it's called from.
+		const backstop = setTimeout(() => done(null), timeout + 1000);
+		backstop.unref?.();
+	});
+}
+
+/**
  * Tools that are their own installable project (their own installer, MCP
  * server or plugin marketplace) rather than a static skill file we can copy.
  * Listing a name here in a preset's `skills:` lets `init` install it for
@@ -43,12 +92,8 @@ export const EXTERNAL_TOOLS = {
 	},
 	superpowers: {
 		url: 'https://github.com/obra/superpowers',
-		manualInstall:
-			'/plugin marketplace add obra/superpowers-marketplace && /plugin install superpowers@superpowers-marketplace',
-		steps: [
-			{ command: 'claude', args: ['plugin', 'marketplace', 'add', 'obra/superpowers-marketplace'] },
-			{ command: 'claude', args: ['plugin', 'install', 'superpowers@superpowers-marketplace', '--scope', 'project'] },
-		],
+		manualInstall: 'npx skills add obra/superpowers --agent claude-code --copy',
+		steps: [{ command: 'npx', args: ['skills', 'add', 'obra/superpowers', '--agent', 'claude-code', '--copy', '-y'] }],
 	},
 	taste: {
 		url: 'https://github.com/Leonxlnx/taste-skill',

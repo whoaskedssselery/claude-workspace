@@ -25,6 +25,7 @@ import {
 	decodeRemoteList,
 	addSkills,
 	packageVersion,
+	fetchLatestVersion,
 	sync,
 	doctor,
 	detectPackageManager,
@@ -421,6 +422,25 @@ describe('writeClaudeMd', () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+});
+
+describe('fetchLatestVersion', () => {
+	// The property that actually matters after the runVisible hang bug: this
+	// must NEVER hang the command that calls it, no matter what the network
+	// does. Forces the failure path with an unroutable address (RFC 5737
+	// TEST-NET-1 — guaranteed to black-hole, never a real response) instead
+	// of trusting a plain timeout number to mean anything on its own.
+	test('resolves null (not a hang, not a throw) when the request never gets a response', async () => {
+		const start = Date.now();
+		const result = await fetchLatestVersion({ url: 'https://192.0.2.1/', timeout: 300 });
+		assert.equal(result, null);
+		assert.ok(Date.now() - start < 5000, 'did not hang waiting on an unroutable host');
+	});
+
+	test('resolves null for a malformed URL instead of throwing', async () => {
+		const result = await fetchLatestVersion({ url: 'not a url', timeout: 300 });
+		assert.equal(result, null);
 	});
 });
 
