@@ -27,10 +27,10 @@ claude-workspace — prepare a project for Claude Code in one command
 Usage:
   claude-workspace init                                       (interactive wizard, needs a TTY)
   claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,...>] [--force]
-  claude-workspace list [--installed] [targetDir]
+  claude-workspace list [--installed | --global] [targetDir]
   claude-workspace sync [targetDir]
-  claude-workspace add <name...>       (operates on the current directory)
-  claude-workspace remove <name...>    (operates on the current directory)
+  claude-workspace add <name...> [--global]       (current directory unless --global)
+  claude-workspace remove <name...> [--global]    (current directory unless --global)
   claude-workspace doctor [targetDir]
   claude-workspace update [targetDir]
 
@@ -66,23 +66,43 @@ Commands:
                   knows about, with a one-line description each.
                   --installed shows only what's actually in targetDir's
                   .claude/workspace.yaml instead of the full catalog.
+                  --global shows skills installed with "add --global"
+                  instead (in ~/.claude/skills/, not tied to any project).
 
   sync            Re-copy the skills declared in .claude/workspace.yaml from
                   the currently installed claude-workspace package (picks up
                   skill content updates), refresh remote (URL-added) skills,
                   and refresh the claude-workspace block in CLAUDE.md.
-                  Doesn't re-install external tools.
+                  Doesn't re-install external tools. Doesn't touch anything
+                  installed with --global — those aren't project state.
 
   add <name...>   Add one or more skills/external tools to an existing
                   workspace (installs it and records it in workspace.yaml).
                   A name that looks like a URL, git remote or "owner/repo"
                   is fetched from that repo via "npx skills" instead of this
-                  package's own catalog. Requires "init" to have been run.
+                  package's own catalog — never written into this package's
+                  own repo, only into the target project's .claude/skills/.
+                  Requires "init" to have been run first.
+
+                  --global  installs a URL/repo source into
+                    ~/.claude/skills/ instead — available in every project
+                    on the machine automatically from then on, no per-project
+                    "add" needed, and not tied to (or recorded in) any one
+                    project's workspace.yaml. Only for remote sources — this
+                    package's own catalog skills are already available
+                    everywhere without installing them anywhere.
+
+                  --skill=<name>  pin one skill out of a multi-skill remote
+                    repo. Without it, a bare "owner/repo" source installs
+                    EVERY skill the repo has (this runs non-interactively,
+                    so there's no prompt to pick just one) — pass this, or a
+                    direct .../tree/main/skills/<name> URL, to avoid that.
 
   remove <name...> Remove one or more skills/tools/remote entries from an
                   existing workspace (deletes the installed skill and drops
                   it from workspace.yaml). For an external tool this only
                   stops tracking it — the tool itself isn't uninstalled.
+                  --global removes a skill installed with "add --global".
 
   doctor          Reports whether declared skills are actually installed,
                   whether their content matches this package's current
@@ -118,7 +138,8 @@ async function main() {
 
 	if (command === 'list') {
 		const installedOnly = args.includes('--installed');
-		await list({ installedOnly, targetDir: targetDirFrom(args) });
+		const global = args.includes('--global') || args.includes('-g');
+		await list({ installedOnly, global, targetDir: targetDirFrom(args) });
 		return;
 	}
 
@@ -160,24 +181,32 @@ async function main() {
 	}
 
 	if (command === 'add') {
-		const names = args.filter((arg) => !arg.startsWith('--'));
+		const global = args.includes('--global') || args.includes('-g');
+		const skillArg = args.find((arg) => arg.startsWith('--skill='));
+		const skill = skillArg ? skillArg.slice('--skill='.length) : null;
+		const names = args.filter((arg) => !arg.startsWith('-'));
 		if (!names.length) {
-			console.error('Usage: claude-workspace add <name...> (operates on the current directory)');
+			console.error(
+				'Usage: claude-workspace add <name...> [--global] [--skill=<name>] (operates on the current directory unless --global)'
+			);
 			process.exitCode = 1;
 			return;
 		}
-		await addSkills(process.cwd(), names);
+		await addSkills(process.cwd(), names, { global, skill });
 		return;
 	}
 
 	if (command === 'remove') {
-		const names = args.filter((arg) => !arg.startsWith('--'));
+		const global = args.includes('--global') || args.includes('-g');
+		const names = args.filter((arg) => !arg.startsWith('-'));
 		if (!names.length) {
-			console.error('Usage: claude-workspace remove <name...> (operates on the current directory)');
+			console.error(
+				'Usage: claude-workspace remove <name...> [--global] (operates on the current directory unless --global)'
+			);
 			process.exitCode = 1;
 			return;
 		}
-		await removeSkills(process.cwd(), names);
+		await removeSkills(process.cwd(), names, { global });
 		return;
 	}
 
@@ -268,7 +297,14 @@ export {
 	GITIGNORE_MARKER_END,
 } from './lib/manifest.js';
 
-export { looksLikeSkillSource, fetchRemoteSkill } from './lib/remote.js';
+export {
+	looksLikeSkillSource,
+	fetchRemoteSkill,
+	listGlobalSkills,
+	recordGlobalSkill,
+	forgetGlobalSkill,
+	GLOBAL_CLAUDE_SKILLS_DIR,
+} from './lib/remote.js';
 
 export { detectPackageManager, isEphemeralRun } from './lib/pm.js';
 

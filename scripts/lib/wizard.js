@@ -16,6 +16,7 @@ import {
 	describeSkill,
 	isSafeName,
 	projectPresetsDir,
+	looksLikeSkillSource,
 } from '../workspace.js';
 
 /** Format-variant skills that only make sense with specific presets — shown only then. */
@@ -201,6 +202,19 @@ export async function runWizard(targetDir) {
 			const coreNames = new Set(await domainSkillNames('core'));
 			const core = selected.filter((name) => coreNames.has(name));
 			const skills = selected.filter((name) => !coreNames.has(name));
+
+			// A preset's skills list can carry a remote (URL/repo) source too, not
+			// just this package's own catalog — asked as free text since there's
+			// no way to enumerate "any GitHub repo" as checkbox items.
+			for (;;) {
+				const remoteInput = await textInput(t(lang, 'addRemoteToPreset'), { default: '' });
+				if (!remoteInput) break;
+				if (!looksLikeSkillSource(remoteInput)) {
+					console.log(`  ${red(t(lang, 'notAUrl'))}`);
+					continue;
+				}
+				skills.push(remoteInput);
+			}
 
 			const saveScope = await select(
 				t(lang, 'saveScopeQuestion'),

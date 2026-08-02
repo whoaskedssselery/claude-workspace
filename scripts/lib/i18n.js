@@ -76,6 +76,8 @@ const STRINGS = {
 		done: 'Done!',
 		none: '(none)',
 		invalidPresetName: 'Use only letters, digits, "-", "_" and "." — no "/" or spaces.',
+		addRemoteToPreset: 'Add a skill by URL/repo to this preset? (blank to finish)',
+		notAUrl: 'Doesn\'t look like a URL, git remote or "owner/repo" — try again or leave blank.',
 	},
 	ru: {
 		wizardTitle: 'Claude Workspace',
@@ -118,6 +120,8 @@ const STRINGS = {
 		done: 'Готово!',
 		none: '(нет)',
 		invalidPresetName: 'Только буквы, цифры, "-", "_" и "." — без "/" и пробелов.',
+		addRemoteToPreset: 'Добавить в этот пресет скилл по URL/репо? (пусто — закончить)',
+		notAUrl: 'Не похоже на URL, git-remote или "owner/repo" — попробуйте ещё раз или оставьте пусто.',
 	},
 };
 

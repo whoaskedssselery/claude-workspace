@@ -42,7 +42,7 @@ import {
 	checkSkillStatus,
 	GITIGNORE_MARKER_START,
 } from './manifest.js';
-import { looksLikeSkillSource, fetchRemoteSkill } from './remote.js';
+import { looksLikeSkillSource, fetchRemoteSkill, listGlobalSkills, forgetGlobalSkill, GLOBAL_CLAUDE_SKILLS_DIR } from './remote.js';
 import { PACKAGE_MANAGER_UPDATE_COMMANDS, detectPackageManager, isEphemeralRun } from './pm.js';
 
 const execFileAsync = promisify(execFile);
@@ -76,7 +76,20 @@ export async function installPreset(preset, presetName, targetDir, { withExterna
 
 	const installedSkills = [];
 	const installedExternal = [];
+	const installedRemote = [];
 	for (const name of requestedNames) {
+		// A preset's skills: list (or --with=) can name a remote source too —
+		// not just this package's own catalog — so a custom preset can bundle
+		// "always pull in this URL" alongside catalog skills.
+		if (looksLikeSkillSource(name)) {
+			const added = await fetchRemoteSkill(targetDir, name);
+			if (!added.length) {
+				warn(`nothing new appeared in .claude/skills/ from "${name}" — not recorded`);
+				continue;
+			}
+			for (const addedName of added) installedRemote.push({ name: addedName, source: name });
+			continue;
+		}
 		const external = EXTERNAL_TOOLS[name];
 		if (external) {
 			const wanted = withExternal || (withNames?.includes(name) ?? false);
@@ -98,15 +111,19 @@ export async function installPreset(preset, presetName, targetDir, { withExterna
 		warn(`"${name}" isn't a known skill or external tool — skipped` + (suggestion ? ` (did you mean "${suggestion}"?)` : ''));
 	}
 
-	await writeWorkspaceManifest(targetDir, presetName, installedCore, installedSkills, installedExternal);
-	const claudeMdResult = await writeClaudeMd(targetDir, presetName, installedCore, [...installedSkills, ...installedExternal], {
-		force,
-	});
+	await writeWorkspaceManifest(targetDir, presetName, installedCore, installedSkills, installedExternal, installedRemote);
+	const claudeMdResult = await writeClaudeMd(
+		targetDir,
+		presetName,
+		installedCore,
+		[...installedSkills, ...installedExternal, ...installedRemote.map((r) => r.name)],
+		{ force }
+	);
 
 	await ensureGitignore(targetDir);
 
 	console.log(`\nDone.`);
-	console.log(`  .claude/skills/  (${installedCore.length + installedSkills.length} skill file(s))`);
+	console.log(`  .claude/skills/  (${installedCore.length + installedSkills.length + installedRemote.length} skill file(s))`);
 	console.log(`  external tools installed: ${installedExternal.length ? installedExternal.join(', ') : 'none'}`);
 	console.log(`  .claude/workspace.yaml`);
 	console.log(`  CLAUDE.md (${claudeMdResult})`);
@@ -241,12 +258,45 @@ export async function doctor(targetDir) {
 }
 
 /**
+ * `global: true` installs a remote (URL/repo) source into ~/.claude/skills/
+ * instead of this project's .claude/skills/ — available in every project on
+ * the machine from then on (Claude Code already reads its personal skills
+ * directory everywhere), so it's how to add a skill once instead of
+ * per-project. Deliberately doesn't touch or require a project's
+ * workspace.yaml at all: a global skill isn't this project's concern.
+ * Only remote sources make sense here — this package's own catalog skills
+ * are already available to every project without installing them anywhere
+ * (they're just copied from the installed npm package on `init`/`sync`).
+ */
+async function addGlobalSkills(names, skill) {
+	for (const name of names) {
+		if (!looksLikeSkillSource(name)) {
+			warn(
+				`"${name}" — global install only takes a URL/repo source. This package's own skills are already available in every project without installing them anywhere.`
+			);
+			continue;
+		}
+		const added = await fetchRemoteSkill(process.cwd(), name, { global: true, skill });
+		if (!added.length) {
+			warn(`nothing new appeared in ~/.claude/skills/ from "${name}" — not recorded`);
+			continue;
+		}
+		console.log(`\nInstalled globally: ${added.join(', ')} — available in every project automatically, not tied to this one.\n`);
+	}
+}
+
+/**
  * Adds one or more skills/external tools/remote sources to an existing
  * workspace: copies the skill (or runs the external tool's installer, or
  * fetches a remote source via `npx skills`) and records it in
  * workspace.yaml. Names already present in the workspace are skipped.
+ * `global: true` bypasses all of that — see addGlobalSkills above. `skill`
+ * pins one skill out of a multi-skill remote source (see fetchRemoteSkill);
+ * only meaningful together with a single remote `names` entry.
  */
-export async function addSkills(targetDir, names) {
+export async function addSkills(targetDir, names, { global = false, skill = null } = {}) {
+	if (global) return addGlobalSkills(names, skill);
+
 	const workspacePath = requireWorkspace(targetDir);
 	const manifest = parseSimpleYaml(await fs.readFile(workspacePath, 'utf8'));
 	const core = manifest.core ?? [];
@@ -259,7 +309,7 @@ export async function addSkills(targetDir, names) {
 
 	for (const name of names) {
 		if (looksLikeSkillSource(name)) {
-			const added = await fetchRemoteSkill(targetDir, name);
+			const added = await fetchRemoteSkill(targetDir, name, { skill });
 			if (!added.length) {
 				warn(`nothing new appeared in .claude/skills/ from "${name}" — not recorded`);
 				continue;
@@ -301,14 +351,28 @@ export async function addSkills(targetDir, names) {
 	);
 }
 
+/** Removes one or more globally-installed (--global add'ed) skills from ~/.claude/skills/. */
+async function removeGlobalSkills(names) {
+	for (const name of names) {
+		if (!isSafeName(name)) continue;
+		const dir = path.join(GLOBAL_CLAUDE_SKILLS_DIR, name);
+		if (existsSync(dir)) await fs.rm(dir, { recursive: true, force: true });
+		await forgetGlobalSkill(name);
+	}
+	console.log(`\nRemoved globally: ${names.join(', ')}.\n`);
+}
+
 /**
  * Removes one or more skills/tools/remote entries from an existing
  * workspace: deletes the installed skill directory and drops it from
  * workspace.yaml. For an external tool, this only stops tracking it here —
  * it does not uninstall the tool itself (use its own uninstall command for
- * that).
+ * that). `global: true` removes a globally-installed skill instead — see
+ * removeGlobalSkills above.
  */
-export async function removeSkills(targetDir, names) {
+export async function removeSkills(targetDir, names, { global = false } = {}) {
+	if (global) return removeGlobalSkills(names);
+
 	const workspacePath = requireWorkspace(targetDir);
 	const manifest = parseSimpleYaml(await fs.readFile(workspacePath, 'utf8'));
 	let core = manifest.core ?? [];
@@ -380,7 +444,22 @@ async function listInstalled(targetDir) {
 	console.log('');
 }
 
-export async function list({ installedOnly = false, targetDir = process.cwd() } = {}) {
+/** Shows skills installed globally (via "add <url> --global"), independent of any one project. */
+async function listGlobalInstalled() {
+	const entries = await listGlobalSkills();
+	console.log(`\nInstalled globally (${GLOBAL_CLAUDE_SKILLS_DIR}):\n`);
+	if (!entries.length) {
+		console.log('  (none — install one with "claude-workspace add <url> --global")');
+	} else {
+		for (const { name, source } of entries) console.log(`  ${name.padEnd(24)} from ${source}`);
+	}
+	console.log('');
+}
+
+export async function list({ installedOnly = false, global = false, targetDir = process.cwd() } = {}) {
+	if (global) {
+		return listGlobalInstalled();
+	}
 	if (installedOnly) {
 		return listInstalled(targetDir);
 	}

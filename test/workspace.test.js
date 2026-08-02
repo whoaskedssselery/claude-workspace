@@ -22,7 +22,6 @@ import {
 	writeClaudeMd,
 	encodeRemoteList,
 	decodeRemoteList,
-	looksLikeSkillSource,
 	packageVersion,
 	sync,
 	doctor,
@@ -305,18 +304,8 @@ describe('isEphemeralRun', () => {
 	});
 });
 
-describe('looksLikeSkillSource', () => {
-	test('true for URLs, git remotes and owner/repo shorthand', () => {
-		assert.ok(looksLikeSkillSource('https://github.com/vercel-labs/agent-skills'));
-		assert.ok(looksLikeSkillSource('git@github.com:vercel-labs/agent-skills.git'));
-		assert.ok(looksLikeSkillSource('vercel-labs/agent-skills'));
-	});
-
-	test('false for a plain catalog-style name', () => {
-		assert.equal(looksLikeSkillSource('react-best-practices'), false);
-		assert.equal(looksLikeSkillSource('commit-discipline'), false);
-	});
-});
+// looksLikeSkillSource itself is covered in test/remote.test.js, alongside
+// the rest of remote.js.
 
 describe('encodeRemoteList / decodeRemoteList', () => {
 	test('round-trips name/source pairs through the flat yaml-list shape', () => {
