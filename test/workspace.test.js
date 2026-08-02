@@ -178,6 +178,11 @@ describe('loadPreset', () => {
 		assert.equal(preset.name, 'oss-contribution');
 	});
 
+	test('debug preset uses debug-mode, commit-discipline and codegraph', async () => {
+		const preset = await loadPreset('debug');
+		assert.deepEqual(preset.core, ['debug-mode', 'commit-discipline', 'codegraph']);
+	});
+
 	test('throws a helpful error for an unknown preset', async () => {
 		await assert.rejects(() => loadPreset('does-not-exist'), /Preset "does-not-exist" not found/);
 	});
@@ -460,6 +465,18 @@ describe('init', () => {
 
 			assert.ok(existsSync(path.join(dir, 'CLAUDE.md')));
 			assert.ok(existsSync(path.join(dir, '.gitignore')));
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('installs the debug preset end-to-end', async () => {
+		const dir = tmpDir();
+		try {
+			await init('debug', dir, {});
+			assert.ok(existsSync(path.join(dir, '.claude', 'skills', 'debug-mode', 'SKILL.md')));
+			const workspaceYaml = await fs.readFile(path.join(dir, '.claude', 'workspace.yaml'), 'utf8');
+			assert.ok(workspaceYaml.includes('preset: debug'));
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}

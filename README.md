@@ -60,6 +60,7 @@ with `--with=` (next section).
 | `assignment` | [assignment-mode](skills/core/assignment-mode/SKILL.md): Claude can write the solution, but verifies it works and stays inside the stated requirements. | Coursework, take-home tests, graded exercises. Add `--with=assignment-defend` if you'll have to explain the work to a grader. |
 | `redesign` | Drops the learning restrictions, adds [react-best-practices](skills/frontend/react-best-practices/SKILL.md). | Visual/UI work. Add `--with=claude-design` for structured design-artifact work. |
 | `oss-contribution` | Minimal, convention-following diffs. | Contributing to someone else's repository. |
+| `debug` | [debug-mode](skills/core/debug-mode/SKILL.md): forces reproduce → isolate → diagnose → fix, in that order, instead of trial-and-error guessing. | Chasing a real bug, especially one that's already survived a session or two of guess-and-check. |
 
 Every preset also includes [codegraph](skills/core/codegraph/SKILL.md) (fast code navigation) and
 `commit-discipline`.
@@ -142,6 +143,7 @@ claude-workspace add <name...> [--global] [--skill=<name>]
 claude-workspace remove <name...> [--global]
 claude-workspace doctor [targetDir]
 claude-workspace update [targetDir]
+claude-workspace version
 ```
 
 `--force` (on `init`) merges the `claude-workspace` block into an existing `CLAUDE.md` that doesn't

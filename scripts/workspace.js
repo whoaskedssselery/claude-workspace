@@ -17,6 +17,7 @@ import { realpathSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { init, sync, list, doctor, addSkills, removeSkills, updatePackage } from './lib/commands.js';
+import { packageVersion } from './lib/catalog.js';
 
 const COMING_SOON = new Set([]);
 
@@ -33,6 +34,7 @@ Usage:
   claude-workspace remove <name...> [--global]    (current directory unless --global)
   claude-workspace doctor [targetDir]
   claude-workspace update [targetDir]
+  claude-workspace version
 
 Commands:
   init            The primary way to use this tool: with no preset name, in
@@ -114,6 +116,8 @@ Commands:
                   then "sync". Safe under npx/pnpm dlx (detected and
                   skipped — nothing global to update there).
 
+  version         Print the installed claude-workspace version.
+
 Custom presets: the init wizard can build one on the fly and save it either
 to .claude-workspace/presets/<name>.yaml in the current project (commit it —
 your team gets it too after a clone) or to
@@ -133,6 +137,11 @@ async function main() {
 
 	if (!command || command === '--help' || command === '-h') {
 		printHelp();
+		return;
+	}
+
+	if (command === 'version' || command === '--version' || command === '-v') {
+		console.log(await packageVersion());
 		return;
 	}
 

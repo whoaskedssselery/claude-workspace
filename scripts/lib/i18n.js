@@ -141,6 +141,7 @@ const PRESET_HINTS = {
 		assignment: 'coursework / homework / take-home',
 		redesign: 'visual/UI-UX rework',
 		'oss-contribution': 'contributing to someone else\'s repository',
+		debug: 'chasing down a bug — forces reproduce → isolate → diagnose → fix instead of guessing',
 	},
 	ru: {
 		learning: 'обучение: человек пишет код, Claude учит и ревьюит',
@@ -148,6 +149,7 @@ const PRESET_HINTS = {
 		assignment: 'курсовая / домашнее задание / take-home',
 		redesign: 'визуальная переработка (UI/UX)',
 		'oss-contribution': 'вклад в чужой репозиторий',
+		debug: 'охота на баг — заставляет пройти reproduce → isolate → diagnose → fix вместо угадывания',
 	},
 };
 

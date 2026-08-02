@@ -1,0 +1,8 @@
+name: debug
+
+core:
+  - debug-mode
+  - commit-discipline
+  - codegraph
+
+skills: []

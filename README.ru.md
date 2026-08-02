@@ -62,6 +62,7 @@ claude-workspace init <preset>
 | `assignment` | [assignment-mode](skills/core/assignment-mode/SKILL.md): Claude может написать решение сам, но проверяет, что оно реально работает, и не выходит за рамки условия. | Учебные задания, тестовые, оцениваемые работы. Добавь `--with=assignment-defend`, если работу нужно будет защищать перед преподавателем. |
 | `redesign` | Убирает учебные ограничения, добавляет [react-best-practices](skills/frontend/react-best-practices/SKILL.md). | Визуальная/UI-работа. Добавь `--with=claude-design` для структурированной работы над дизайн-артефактами. |
 | `oss-contribution` | Минимальные, соответствующие конвенциям репозитория дифф-патчи. | Вклад в чужой репозиторий. |
+| `debug` | [debug-mode](skills/core/debug-mode/SKILL.md): заставляет пройти reproduce → isolate → diagnose → fix в этом порядке, вместо угадывания методом проб и ошибок. | Охота на реальный баг, особенно если он уже пережил сессию-другую "поменял — перезапустил — не помогло". |
 
 Каждый пресет также включает [codegraph](skills/core/codegraph/SKILL.md) (быстрая навигация по
 коду) и `commit-discipline`.
@@ -145,6 +146,7 @@ claude-workspace add <name...> [--global] [--skill=<name>]
 claude-workspace remove <name...> [--global]
 claude-workspace doctor [targetDir]
 claude-workspace update [targetDir]
+claude-workspace version
 ```
 
 `--force` (у `init`) вливает блок `claude-workspace` в уже существующий `CLAUDE.md`, у которого
