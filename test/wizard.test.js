@@ -58,6 +58,20 @@ describe('wizard: buildAdditionalGroups', () => {
 			assert.ok(item.hint && item.hint.length > 0, item.value);
 		}
 	});
+
+	test('domain skills are split into one group per kind, not merged into one flat list', async () => {
+		// Each group has to be small enough to fit a terminal screen on its own
+		// (folderCheckbox in prompt.js shows one group per "folder") — a single
+		// merged group defeats that, which is exactly the bug this replaced.
+		const groups = await buildAdditionalGroups('en', 'learning', []);
+		const titles = groups.map((g) => g.title);
+		assert.ok(titles.includes('frontend/'));
+		assert.ok(titles.includes('backend/'));
+		assert.ok(!titles.includes('Domain skills'));
+
+		const frontend = groups.find((g) => g.title === 'frontend/');
+		assert.ok(frontend.items.every((item) => !item.label.includes('/')), 'items keep their bare name, no kind/ prefix');
+	});
 });
 
 describe('wizard: buildFullCatalogGroups', () => {

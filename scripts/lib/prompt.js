@@ -109,8 +109,8 @@ function renderSubtitle(subtitle) {
 }
 
 /** Single-select arrow-key menu. `choices`: [{ label, value, hint }]. */
-export async function select(message, choices, { subtitle } = {}) {
-	let cursor = 0;
+export async function select(message, choices, { subtitle, initialCursor = 0 } = {}) {
+	let cursor = initialCursor >= 0 && initialCursor < choices.length ? initialCursor : 0;
 	const render = () => {
 		const lines = [...renderSubtitle(subtitle), bold(message)];
 		choices.forEach((choice, i) => {
@@ -147,10 +147,12 @@ export async function confirm(message, { yesLabel = 'Yes', noLabel = 'No', defau
  * headers. `groups`: [{ title, items: [{ label, value, hint }] }].
  * Returns the array of selected `value`s.
  */
-export async function checkbox(message, groups, { subtitle } = {}) {
+export async function checkbox(message, groups, { subtitle, initialSelected } = {}) {
 	const { items, renderEntries } = flattenGroups(groups);
 	let cursor = 0;
-	let selected = new Set();
+	let selected = initialSelected
+		? new Set(items.map((item, i) => (initialSelected.has(item.value) ? i : -1)).filter((i) => i >= 0))
+		: new Set();
 
 	const render = () => {
 		const lines = [...renderSubtitle(subtitle), bold(message), ''];
@@ -192,6 +194,54 @@ export async function checkbox(message, groups, { subtitle } = {}) {
 	};
 
 	return runInteractive({ render, handleKey });
+}
+
+/**
+ * Multi-select across grouped "folders" instead of one flat checkbox list —
+ * pick a folder, checkbox just its items, land back on the folder list,
+ * repeat, then "Done". Exists because a single flat list long enough to
+ * exceed the terminal's height breaks the redraw-in-place approach
+ * `runInteractive` uses (moving the cursor up more rows than are actually
+ * visible just pins it at the top of the viewport, which reads as "jumps
+ * back to the start" on every keypress) — keeping each screen to one
+ * folder's worth of items keeps it well under any real terminal's height.
+ * `groups`: [{ title, items: [{ label, value, hint }] }], same shape
+ * `checkbox` takes. Returns the flat array of all selected values across
+ * every folder, in catalog order (not selection order).
+ */
+export async function folderCheckbox(message, groups, { subtitle } = {}) {
+	const selected = new Set();
+	let folderCursor = 0;
+
+	for (;;) {
+		const folderChoices = groups.map((group, i) => {
+			const count = group.items.filter((item) => selected.has(item.value)).length;
+			const label = group.title ?? `Skills ${i + 1}`;
+			return { label: `${label}  ${count ? green(`(${count} selected)`) : dim('(none selected)')}`, value: i };
+		});
+		folderChoices.push({ label: green(`✓ ${message}`), value: '__done__' });
+
+		const choice = await select(message, folderChoices, { subtitle, initialCursor: folderCursor });
+		if (choice === '__done__') break;
+		folderCursor = choice;
+
+		const group = groups[choice];
+		try {
+			const result = await checkbox(group.title ?? '', [{ title: null, items: group.items }], {
+				subtitle: [subtitle, group.title].filter(Boolean).join(' — '),
+				initialSelected: selected,
+			});
+			for (const item of group.items) {
+				if (result.includes(item.value)) selected.add(item.value);
+				else selected.delete(item.value);
+			}
+		} catch (error) {
+			if (error instanceof CancelledError) continue; // esc backs out to the folder list, not the whole wizard
+			throw error;
+		}
+	}
+
+	return [...selected];
 }
 
 /** Plain line-based text input (works without raw mode). */

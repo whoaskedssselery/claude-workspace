@@ -2,7 +2,7 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 
-import { select, checkbox, confirm, textInput, CancelledError } from './prompt.js';
+import { select, folderCheckbox, confirm, textInput, CancelledError } from './prompt.js';
 import { bold, cyan, green, dim, red } from './colors.js';
 import { loadConfig, saveConfig, t, presetHint, supportedLanguages, GLOBAL_PRESETS_DIR } from './i18n.js';
 import {
@@ -17,6 +17,7 @@ import {
 	isSafeName,
 	projectPresetsDir,
 	looksLikeSkillSource,
+	parseSimpleYaml,
 } from '../workspace.js';
 
 /** Format-variant skills that only make sense with specific presets — shown only then. */
@@ -58,18 +59,21 @@ function externalToolsGroup(excluded) {
 	return items.length ? { title: null, items } : null;
 }
 
-/** Additional-skills checkbox for an existing preset — domain skills, relevant format variants, external tools. */
+/**
+ * Additional-skills folders for an existing preset — one folder per domain
+ * (frontend/, backend/, ...), relevant format variants, external tools.
+ * One group per folder (not merged into one flat list) so each is small
+ * enough to fit a terminal screen — see folderCheckbox in prompt.js.
+ */
 async function buildAdditionalGroups(lang, presetName, alreadyIncluded) {
 	const excluded = new Set(alreadyIncluded);
 	const groups = [];
 
-	const domainItems = [];
 	for (const kind of DOMAIN_DIRS) {
 		if (kind === 'formats') continue;
 		const group = await buildDomainGroup(kind, excluded);
-		if (group) domainItems.push(...group.items.map((item) => ({ ...item, label: `${kind}/${item.label}` })));
+		if (group) groups.push(group);
 	}
-	if (domainItems.length) groups.push({ title: t(lang, 'domainSkillsHeader'), items: domainItems });
 
 	const formatGroup = await buildFormatGroup(presetName, excluded);
 	if (formatGroup) groups.push({ title: t(lang, 'formatVariantsHeader'), items: formatGroup.items });
@@ -168,6 +172,21 @@ export async function runWizard(targetDir) {
 		lang = await resolveLanguage();
 		console.log(`\n${dim(t(lang, 'wizardTagline'))}`);
 
+		const existingWorkspacePath = path.join(targetDir, '.claude', 'workspace.yaml');
+		if (existsSync(existingWorkspacePath)) {
+			const existingManifest = parseSimpleYaml(await fs.readFile(existingWorkspacePath, 'utf8'));
+			const keepGoing = await confirm(t(lang, 'alreadyInitialized', { preset: existingManifest.preset ?? '?' }), {
+				yesLabel: t(lang, 'alreadyInitializedYes'),
+				noLabel: t(lang, 'alreadyInitializedNo'),
+				defaultYes: false,
+				subtitle: t(lang, 'stepAlreadyInitialized'),
+			});
+			if (!keepGoing) {
+				console.log(`\n${dim(t(lang, 'alreadyInitializedHint'))}\n`);
+				return;
+			}
+		}
+
 		const builtIn = await listPresetNames(PRESETS_DIR);
 		const projectCustom = await listPresetNames(projectPresetsDir(targetDir));
 		const globalCustom = await listPresetNames(GLOBAL_PRESETS_DIR);
@@ -195,7 +214,7 @@ export async function runWizard(targetDir) {
 				if (!isSafeName(presetName)) console.log(`  ${red(t(lang, 'invalidPresetName'))}`);
 			} while (!isSafeName(presetName));
 			const groups = await buildFullCatalogGroups(lang);
-			const selected = await checkbox(t(lang, 'selectSkillsForPreset'), groups, {
+			const selected = await folderCheckbox(t(lang, 'selectSkillsForPreset'), groups, {
 				subtitle: t(lang, 'stepCustomSkills'),
 			});
 
@@ -235,7 +254,7 @@ export async function runWizard(targetDir) {
 
 			const groups = await buildAdditionalGroups(lang, presetName, presetObj.skills ?? []);
 			const additional = groups.length
-				? await checkbox(t(lang, 'additionalSkills'), groups, { subtitle: t(lang, 'stepAdditionalSkills') })
+				? await folderCheckbox(t(lang, 'additionalSkills'), groups, { subtitle: t(lang, 'stepAdditionalSkills') })
 				: [];
 			presetObj = { ...presetObj, skills: [...(presetObj.skills ?? []), ...additional] };
 		}
