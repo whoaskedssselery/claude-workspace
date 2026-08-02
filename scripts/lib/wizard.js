@@ -15,6 +15,7 @@ import {
 	installPreset,
 	describeSkill,
 	isSafeName,
+	projectPresetsDir,
 } from '../workspace.js';
 
 /** Format-variant skills that only make sense with specific presets — shown only then. */
@@ -137,11 +138,12 @@ function printSummary(lang, { presetName, core, skills, external }) {
 	console.log('');
 }
 
-async function saveCustomPreset(name, core, skills) {
+/** `dir` defaults to the personal, all-projects location; pass projectPresetsDir(targetDir) to commit it to the current repo instead, for a team to share via git. */
+async function saveCustomPreset(name, core, skills, dir = GLOBAL_PRESETS_DIR) {
 	if (!isSafeName(name)) {
 		throw new Error(`Invalid preset name "${name}" — use only letters, digits, "-", "_" and ".".`);
 	}
-	await fs.mkdir(GLOBAL_PRESETS_DIR, { recursive: true });
+	await fs.mkdir(dir, { recursive: true });
 	const renderList = (items) => (items.length ? items.map((n) => `  - ${n}`).join('\n') : '  []');
 	const yaml = [
 		`name: ${name}`,
@@ -153,7 +155,7 @@ async function saveCustomPreset(name, core, skills) {
 		renderList(skills),
 		'',
 	].join('\n');
-	await fs.writeFile(path.join(GLOBAL_PRESETS_DIR, `${name}.yaml`), yaml, 'utf8');
+	await fs.writeFile(path.join(dir, `${name}.yaml`), yaml, 'utf8');
 }
 
 export { buildAdditionalGroups, buildFullCatalogGroups, saveCustomPreset };
@@ -166,11 +168,16 @@ export async function runWizard(targetDir) {
 		console.log(`\n${dim(t(lang, 'wizardTagline'))}`);
 
 		const builtIn = await listPresetNames(PRESETS_DIR);
-		const custom = await listPresetNames(GLOBAL_PRESETS_DIR);
+		const projectCustom = await listPresetNames(projectPresetsDir(targetDir));
+		const globalCustom = await listPresetNames(GLOBAL_PRESETS_DIR);
 
 		const presetChoices = [
 			...builtIn.sort().map((name) => ({ label: name, value: name, hint: presetHint(lang, name) })),
-			...custom.sort().map((name) => ({ label: `${name} (custom)`, value: name, hint: '' })),
+			...projectCustom.sort().map((name) => ({ label: `${name} (custom, project)`, value: name, hint: '' })),
+			...globalCustom
+				.filter((name) => !projectCustom.includes(name))
+				.sort()
+				.map((name) => ({ label: `${name} (custom, global)`, value: name, hint: '' })),
 			{ label: t(lang, 'createCustomPreset'), value: '__custom__' },
 		];
 
@@ -195,18 +202,22 @@ export async function runWizard(targetDir) {
 			const core = selected.filter((name) => coreNames.has(name));
 			const skills = selected.filter((name) => !coreNames.has(name));
 
-			const save = await confirm(t(lang, 'saveGlobally'), {
-				yesLabel: t(lang, 'saveGloballyYes', { name: presetName }),
-				noLabel: t(lang, 'saveGloballyNo'),
-				defaultYes: true,
-				subtitle: t(lang, 'stepSaveGlobally'),
-			});
-			if (save) await saveCustomPreset(presetName, core, skills);
+			const saveScope = await select(
+				t(lang, 'saveScopeQuestion'),
+				[
+					{ label: t(lang, 'saveScopeProject'), value: 'project' },
+					{ label: t(lang, 'saveScopeGlobal'), value: 'global' },
+					{ label: t(lang, 'saveScopeNone'), value: 'none' },
+				],
+				{ subtitle: t(lang, 'stepSaveGlobally') }
+			);
+			if (saveScope === 'project') await saveCustomPreset(presetName, core, skills, projectPresetsDir(targetDir));
+			else if (saveScope === 'global') await saveCustomPreset(presetName, core, skills);
 
 			presetObj = { name: presetName, core, skills };
 		} else {
 			presetName = presetChoice;
-			presetObj = await loadPreset(presetName);
+			presetObj = await loadPreset(presetName, targetDir);
 
 			const groups = await buildAdditionalGroups(lang, presetName, presetObj.skills ?? []);
 			const additional = groups.length

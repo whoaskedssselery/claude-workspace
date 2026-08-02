@@ -1,5 +1,4 @@
 name: oss-contribution
-description: Contributing to someone else's repository — minimal, convention-following diffs.
 
 core:
   - commit-discipline

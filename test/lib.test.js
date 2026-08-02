@@ -94,8 +94,10 @@ describe('i18n: t', () => {
 	});
 
 	test('interpolates {vars} into the template', () => {
-		const result = t('en', 'saveGloballyYes', { name: 'my-preset' });
-		assert.match(result, /my-preset/);
+		// An unknown key falls back to itself as the literal template, which is
+		// enough to exercise the {var} substitution regex on its own.
+		const result = t('en', 'Hello {name}', { name: 'my-preset' });
+		assert.equal(result, 'Hello my-preset');
 	});
 
 	test('returns the raw key for an unknown key', () => {

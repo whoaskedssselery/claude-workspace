@@ -1,4 +1,5 @@
 version: 1
+toolVersion: {{VERSION}}
 
 preset: {{PRESET}}
 
@@ -10,3 +11,9 @@ skills:
 
 external:
 {{EXTERNAL_LIST}}
+
+# Skills pulled in from an arbitrary repo via "claude-workspace add <url>"
+# (through `npx skills`), as "name=source" — not part of this package's own
+# catalog, so `sync` re-fetches each one from its recorded source instead.
+remote:
+{{REMOTE_LIST}}

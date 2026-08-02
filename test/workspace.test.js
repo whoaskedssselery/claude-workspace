@@ -16,9 +16,16 @@ import {
 	copySkill,
 	copyDomainSkill,
 	loadPreset,
+	projectPresetsDir,
 	ensureGitignore,
 	init,
+	writeClaudeMd,
+	encodeRemoteList,
+	decodeRemoteList,
+	looksLikeSkillSource,
+	packageVersion,
 	sync,
+	doctor,
 	detectPackageManager,
 	isEphemeralRun,
 	isSafeName,
@@ -295,6 +302,158 @@ describe('isEphemeralRun', () => {
 	test('false for a regular global npm install', () => {
 		delete process.env.npm_command;
 		assert.equal(isEphemeralRun('/usr/local/lib/node_modules/claude-workspace/scripts/workspace.js'), false);
+	});
+});
+
+describe('looksLikeSkillSource', () => {
+	test('true for URLs, git remotes and owner/repo shorthand', () => {
+		assert.ok(looksLikeSkillSource('https://github.com/vercel-labs/agent-skills'));
+		assert.ok(looksLikeSkillSource('git@github.com:vercel-labs/agent-skills.git'));
+		assert.ok(looksLikeSkillSource('vercel-labs/agent-skills'));
+	});
+
+	test('false for a plain catalog-style name', () => {
+		assert.equal(looksLikeSkillSource('react-best-practices'), false);
+		assert.equal(looksLikeSkillSource('commit-discipline'), false);
+	});
+});
+
+describe('encodeRemoteList / decodeRemoteList', () => {
+	test('round-trips name/source pairs through the flat yaml-list shape', () => {
+		const remote = [
+			{ name: 'web-design-guidelines', source: 'vercel-labs/agent-skills' },
+			{ name: 'foo', source: 'https://github.com/a/b' },
+		];
+		const decoded = decodeRemoteList(encodeRemoteList(remote));
+		assert.deepEqual(decoded, remote);
+	});
+
+	test('decodeRemoteList tolerates undefined (no remote: section yet)', () => {
+		assert.deepEqual(decodeRemoteList(undefined), []);
+	});
+});
+
+describe('projectPresetsDir + loadPreset project scope', () => {
+	test('loadPreset finds a preset committed to <project>/.claude-workspace/presets/', async () => {
+		const dir = tmpDir();
+		try {
+			const presetsDir = projectPresetsDir(dir);
+			await fs.mkdir(presetsDir, { recursive: true });
+			await fs.writeFile(
+				path.join(presetsDir, 'team-preset.yaml'),
+				'name: team-preset\n\ncore:\n  - commit-discipline\n\nskills: []\n',
+				'utf8'
+			);
+
+			const preset = await loadPreset('team-preset', dir);
+			assert.deepEqual(preset.core, ['commit-discipline']);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('a built-in preset name always wins over a project-local one', async () => {
+		const dir = tmpDir();
+		try {
+			const presetsDir = projectPresetsDir(dir);
+			await fs.mkdir(presetsDir, { recursive: true });
+			await fs.writeFile(path.join(presetsDir, 'project.yaml'), 'name: project\n\ncore:\n  - codegraph\n\nskills: []\n', 'utf8');
+
+			const preset = await loadPreset('project', dir);
+			assert.notDeepEqual(preset.core, ['codegraph']);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe('writeClaudeMd', () => {
+	test('writes a fresh file with markers when none exists', async () => {
+		const dir = tmpDir();
+		try {
+			const result = await writeClaudeMd(dir, 'project', ['health-review'], ['api-designer']);
+			assert.equal(result, 'written');
+			const content = await fs.readFile(path.join(dir, 'CLAUDE.md'), 'utf8');
+			assert.ok(content.includes('<!-- claude-workspace:start -->'));
+			assert.ok(content.includes('health-review'));
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('updates only the marked block, preserving hand-written content around it', async () => {
+		const dir = tmpDir();
+		try {
+			await writeClaudeMd(dir, 'project', ['health-review'], []);
+			const claudeMdPath = path.join(dir, 'CLAUDE.md');
+			const original = await fs.readFile(claudeMdPath, 'utf8');
+			await fs.writeFile(claudeMdPath, original + '\n## My own notes\n\nDo not touch this.\n', 'utf8');
+
+			const result = await writeClaudeMd(dir, 'project', ['health-review', 'commit-discipline'], []);
+			assert.equal(result, 'updated');
+			const updated = await fs.readFile(claudeMdPath, 'utf8');
+			assert.ok(updated.includes('commit-discipline'));
+			assert.ok(updated.includes('## My own notes'));
+			assert.ok(updated.includes('Do not touch this.'));
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('a hand-written CLAUDE.md with no markers is left untouched without --force', async () => {
+		const dir = tmpDir();
+		try {
+			await fs.writeFile(path.join(dir, 'CLAUDE.md'), 'hand-written, no markers\n', 'utf8');
+			const result = await writeClaudeMd(dir, 'project', [], []);
+			assert.equal(result, 'skipped');
+			const content = await fs.readFile(path.join(dir, 'CLAUDE.md'), 'utf8');
+			assert.equal(content, 'hand-written, no markers\n');
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('force appends the block to a marker-less file instead of overwriting it', async () => {
+		const dir = tmpDir();
+		try {
+			await fs.writeFile(path.join(dir, 'CLAUDE.md'), 'hand-written, no markers\n', 'utf8');
+			const result = await writeClaudeMd(dir, 'project', ['health-review'], [], { force: true });
+			assert.equal(result, 'appended');
+			const content = await fs.readFile(path.join(dir, 'CLAUDE.md'), 'utf8');
+			assert.ok(content.includes('hand-written, no markers'));
+			assert.ok(content.includes('<!-- claude-workspace:start -->'));
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe('toolVersion tracking', () => {
+	test('init records the running package version in workspace.yaml', async () => {
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			const workspaceYaml = await fs.readFile(path.join(dir, '.claude', 'workspace.yaml'), 'utf8');
+			const version = await packageVersion();
+			assert.ok(workspaceYaml.includes(`toolVersion: ${version}`));
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('doctor reports a match when the recorded version equals the running one', async () => {
+		const dir = tmpDir();
+		const originalLog = console.log;
+		const lines = [];
+		try {
+			await init('oss-contribution', dir, {});
+			console.log = (msg) => lines.push(String(msg));
+			await doctor(dir);
+		} finally {
+			console.log = originalLog;
+			rmSync(dir, { recursive: true, force: true });
+		}
+		assert.ok(lines.some((l) => l.includes('matches what you')));
 	});
 });
 
