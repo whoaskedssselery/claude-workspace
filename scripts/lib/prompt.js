@@ -67,9 +67,18 @@ function requireTTY() {
  * screen, and it's pinned to the bottom since new output keeps forcing the
  * view back down).
  */
+/**
+ * The "-1" used to just be a nominal safety margin; widened to "-3" after a
+ * real 12-row terminal still showed a small (~2-line) leftover fragment per
+ * step even with the reservation below in place — there's no visibility
+ * into whether that's an off-by-a-couple-rows somewhere in this file or a
+ * console-specific quirk in how it reports/rounds cursor movement, so this
+ * trades a little more "N more above/below" pagination for headroom against
+ * either.
+ */
 function terminalRowBudget(chromeLines) {
 	const rows = process.stdout.rows || 24;
-	return Math.max(3, rows - chromeLines - 1);
+	return Math.max(3, rows - chromeLines - 3);
 }
 
 /** Slice `length` items down to `maxVisible`, keeping `cursor` in view. Returns { start, end } (end exclusive). */
