@@ -8,10 +8,12 @@
 Opinionated workspace manager for Claude Code.
 
 Prepare a project for a specific way of working — learning, day-to-day project work, a graded
-assignment, a redesign, contributing to someone else's repo — with a single command:
+assignment, a redesign, contributing to someone else's repo — with a single command. Install it
+globally:
 
 ```bash
-npx claude-workspace init
+npm install -g claude-workspace
+claude-workspace init
 ```
 
 That launches the [interactive wizard](#interactive-wizard) — pick (or build) a preset, pick
@@ -20,15 +22,14 @@ instead (CI, automation, or you already know exactly what you want)? Pass a pres
 directly, no prompts:
 
 ```bash
-npx claude-workspace init <preset>
+claude-workspace init <preset>
 ```
 
-Both work the same way installed globally, if you'd rather not type `npx` every time:
+Don't want a global install? Both work the same way through `npx`:
 
 ```bash
-npm install -g claude-workspace
-claude-workspace init          # wizard
-claude-workspace init <preset> # scriptable
+npx claude-workspace init          # wizard
+npx claude-workspace init <preset> # scriptable
 ```
 
 This installs, into the current directory:
@@ -113,7 +114,7 @@ itself — not a technology choice, a *how strict/how much explanation* choice. 
 Everything in `skills/frontend`, `backend`, `fullstack`, `ml`, `devops`, `general` and `planning`
 (other than react-best-practices and claude-design) is vendored from
 [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) (MIT) — run
-`npx claude-workspace list` for the full set with descriptions.
+`claude-workspace list` for the full set with descriptions.
 
 Everything above is a static, portable `SKILL.md` (+ optional reference files) with no installer of
 its own, so `init` copies it directly whenever it's requested — no flag needed for domain skills.
@@ -125,11 +126,11 @@ preset's core behavior. `--with=` accepts **any** known skill name — domain sk
 and external tools alike — comma-separated, and works for more than one at a time:
 
 ```bash
-npx claude-workspace init learning . --with=react-best-practices
-npx claude-workspace init learning . --with=api-designer,security-reviewer,database-optimizer
-npx claude-workspace init redesign . --with=taste,claude-design
-npx claude-workspace init assignment . --with=assignment-defend
-npx claude-workspace init project . --with=feature-forge
+claude-workspace init learning . --with=react-best-practices
+claude-workspace init learning . --with=api-designer,security-reviewer,database-optimizer
+claude-workspace init redesign . --with=taste,claude-design
+claude-workspace init assignment . --with=assignment-defend
+claude-workspace init project . --with=feature-forge
 ```
 
 It isn't limited to what the chosen preset already lists — `learning` ships with an empty skill
@@ -165,7 +166,7 @@ it prints the manual command instead and keeps going.
 terminal:
 
 ```bash
-npx claude-workspace init
+claude-workspace init
 ```
 
 Flags and preset names — everything documented above — are the scriptable/advanced path for CI,
@@ -235,14 +236,14 @@ has nothing to do and is skipped without treating that as an error. Either way i
 ## Usage
 
 ```bash
-npx claude-workspace init                                       (interactive wizard, needs a TTY)
-npx claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,...>] [--force]
-npx claude-workspace list [--installed]
-npx claude-workspace sync [targetDir]
-npx claude-workspace add <name...>
-npx claude-workspace remove <name...>
-npx claude-workspace doctor [targetDir]
-npx claude-workspace update [targetDir]
+claude-workspace init                                       (interactive wizard, needs a TTY)
+claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,...>] [--force]
+claude-workspace list [--installed]
+claude-workspace sync [targetDir]
+claude-workspace add <name...>
+claude-workspace remove <name...>
+claude-workspace doctor [targetDir]
+claude-workspace update [targetDir]
 ```
 
 `list` prints every preset, skill and external tool this package knows about with a one-line
@@ -270,7 +271,7 @@ Deliberately not built (yet):
 
 ## Local development
 
-Published on npm, so `npx claude-workspace init <preset>` (as in the Quick start above) works
+Published on npm, so both the global install and `npx` forms shown in the Quick start above work
 against the latest published version. To try an unreleased local change before publishing it:
 
 ```bash

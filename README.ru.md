@@ -8,10 +8,12 @@
 Опинионированный менеджер воркспейсов для Claude Code.
 
 Подготавливает проект под конкретный способ работы — обучение, повседневная работа над проектом,
-учебное/тестовое задание, редизайн, вклад в чужой репозиторий — одной командой:
+учебное/тестовое задание, редизайн, вклад в чужой репозиторий — одной командой. Установите
+глобально:
 
 ```bash
-npx claude-workspace init
+npm install -g claude-workspace
+claude-workspace init
 ```
 
 Это запускает [интерактивный мастер](#интерактивный-мастер) — выбор (или создание) пресета, выбор
@@ -20,16 +22,14 @@ npx claude-workspace init
 напрямую, без вопросов:
 
 ```bash
-npx claude-workspace init <preset>
+claude-workspace init <preset>
 ```
 
-Оба варианта работают одинаково и при глобальной установке, если не хочется каждый раз писать
-`npx`:
+Не хотите ставить глобально? Оба варианта точно так же работают через `npx`:
 
 ```bash
-npm install -g claude-workspace
-claude-workspace init          # мастер
-claude-workspace init <preset> # скриптуемый вариант
+npx claude-workspace init          # мастер
+npx claude-workspace init <preset> # скриптуемый вариант
 ```
 
 Команда устанавливает в текущую директорию:
@@ -116,7 +116,7 @@ React или бэкенду — выбираете пресет под то, *к
 Всё в `skills/frontend`, `backend`, `fullstack`, `ml`, `devops`, `general` и `planning` (кроме
 react-best-practices и claude-design) завендорено из
 [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) (MIT) — весь список с
-описаниями смотрите через `npx claude-workspace list`.
+описаниями смотрите через `claude-workspace list`.
 
 Всё перечисленное — статичный, портативный `SKILL.md` (+ опциональные reference-файлы) без
 собственного установщика, так что `init` копирует его напрямую по первому запросу — флаг для
@@ -130,11 +130,11 @@ react-best-practices и claude-design) завендорено из
 штук:
 
 ```bash
-npx claude-workspace init learning . --with=react-best-practices
-npx claude-workspace init learning . --with=api-designer,security-reviewer,database-optimizer
-npx claude-workspace init redesign . --with=taste,claude-design
-npx claude-workspace init assignment . --with=assignment-defend
-npx claude-workspace init project . --with=feature-forge
+claude-workspace init learning . --with=react-best-practices
+claude-workspace init learning . --with=api-designer,security-reviewer,database-optimizer
+claude-workspace init redesign . --with=taste,claude-design
+claude-workspace init assignment . --with=assignment-defend
+claude-workspace init project . --with=feature-forge
 ```
 
 Флаг не ограничен тем, что уже перечислено в выбранном пресете — `learning` специально поставляется
@@ -170,7 +170,7 @@ npx claude-workspace init project . --with=feature-forge
 терминале:
 
 ```bash
-npx claude-workspace init
+claude-workspace init
 ```
 
 Флаги и имена пресетов — всё, что описано выше — это скриптуемый/продвинутый путь для CI,
@@ -237,14 +237,14 @@ claude-workspace update            # npm install -g claude-workspace@latest, з�
 ## Использование
 
 ```bash
-npx claude-workspace init                                       (интерактивный мастер, нужен TTY)
-npx claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,...>] [--force]
-npx claude-workspace list [--installed]
-npx claude-workspace sync [targetDir]
-npx claude-workspace add <name...>
-npx claude-workspace remove <name...>
-npx claude-workspace doctor [targetDir]
-npx claude-workspace update [targetDir]
+claude-workspace init                                       (интерактивный мастер, нужен TTY)
+claude-workspace init <preset> [targetDir] [--with-external] [--with=<name,...>] [--force]
+claude-workspace list [--installed]
+claude-workspace sync [targetDir]
+claude-workspace add <name...>
+claude-workspace remove <name...>
+claude-workspace doctor [targetDir]
+claude-workspace update [targetDir]
 ```
 
 `list` печатает все пресеты, скиллы и внешние инструменты, о которых знает пакет, с однострочным
@@ -274,8 +274,8 @@ npx claude-workspace update [targetDir]
 
 ## Локальная разработка
 
-Пакет опубликован в npm, так что `npx claude-workspace init <preset>` (как в примере в начале)
-реально работает на последней опубликованной версии. Чтобы попробовать локальные изменения до
+Пакет опубликован в npm, так что оба варианта из начала README — глобальная установка и `npx` —
+реально работают на последней опубликованной версии. Чтобы попробовать локальные изменения до
 публикации новой версии:
 
 ```bash
