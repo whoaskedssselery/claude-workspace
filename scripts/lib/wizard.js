@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 
 import { select, checkbox, confirm, textInput, CancelledError } from './prompt.js';
-import { bold, cyan, green, dim } from './colors.js';
+import { bold, cyan, green, dim, red } from './colors.js';
 import { loadConfig, saveConfig, t, presetHint, supportedLanguages, GLOBAL_PRESETS_DIR } from './i18n.js';
 import {
 	PRESETS_DIR,
@@ -14,6 +14,7 @@ import {
 	listPresetNames,
 	installPreset,
 	describeSkill,
+	isSafeName,
 } from '../workspace.js';
 
 /** Format-variant skills that only make sense with specific presets — shown only then. */
@@ -137,6 +138,9 @@ function printSummary(lang, { presetName, core, skills, external }) {
 }
 
 async function saveCustomPreset(name, core, skills) {
+	if (!isSafeName(name)) {
+		throw new Error(`Invalid preset name "${name}" — use only letters, digits, "-", "_" and ".".`);
+	}
 	await fs.mkdir(GLOBAL_PRESETS_DIR, { recursive: true });
 	const renderList = (items) => (items.length ? items.map((n) => `  - ${n}`).join('\n') : '  []');
 	const yaml = [
@@ -178,7 +182,10 @@ export async function runWizard(targetDir) {
 		let presetObj;
 
 		if (presetChoice === '__custom__') {
-			presetName = await textInput(t(lang, 'customPresetName'), { default: 'my-custom' });
+			do {
+				presetName = await textInput(t(lang, 'customPresetName'), { default: 'my-custom' });
+				if (!isSafeName(presetName)) console.log(`  ${red(t(lang, 'invalidPresetName'))}`);
+			} while (!isSafeName(presetName));
 			const groups = await buildFullCatalogGroups(lang);
 			const selected = await checkbox(t(lang, 'selectSkillsForPreset'), groups, {
 				subtitle: t(lang, 'stepCustomSkills'),

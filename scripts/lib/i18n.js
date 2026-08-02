@@ -74,6 +74,7 @@ const STRINGS = {
 		cancelled: 'Cancelled — nothing was written.',
 		done: 'Done!',
 		none: '(none)',
+		invalidPresetName: 'Use only letters, digits, "-", "_" and "." — no "/" or spaces.',
 	},
 	ru: {
 		wizardTitle: 'Claude Workspace',
@@ -114,6 +115,7 @@ const STRINGS = {
 		cancelled: 'Отменено — ничего не записано.',
 		done: 'Готово!',
 		none: '(нет)',
+		invalidPresetName: 'Только буквы, цифры, "-", "_" и "." — без "/" и пробелов.',
 	},
 };
 

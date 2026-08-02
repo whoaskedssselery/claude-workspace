@@ -20,6 +20,8 @@ import {
 	init,
 	sync,
 	detectPackageManager,
+	isEphemeralRun,
+	isSafeName,
 	SKILLS_DIR,
 } from '../scripts/workspace.js';
 
@@ -173,6 +175,25 @@ describe('loadPreset', () => {
 	test('throws a helpful error for an unknown preset', async () => {
 		await assert.rejects(() => loadPreset('does-not-exist'), /Preset "does-not-exist" not found/);
 	});
+
+	test('rejects a path-traversal preset name instead of resolving it', async () => {
+		await assert.rejects(() => loadPreset('../../etc/passwd'), /Invalid preset name/);
+	});
+});
+
+describe('isSafeName', () => {
+	test('accepts kebab-case, dots and underscores', () => {
+		assert.ok(isSafeName('react-best-practices'));
+		assert.ok(isSafeName('my_custom.v2'));
+	});
+
+	test('rejects anything that could escape a joined directory', () => {
+		assert.equal(isSafeName('../escape'), false);
+		assert.equal(isSafeName('a/b'), false);
+		assert.equal(isSafeName('a\\b'), false);
+		assert.equal(isSafeName('.hidden'), false);
+		assert.equal(isSafeName(''), false);
+	});
 });
 
 describe('ensureGitignore', () => {
@@ -247,6 +268,33 @@ describe('detectPackageManager', () => {
 			detectPackageManager('C:\\Users\\me\\AppData\\Local\\pnpm\\global\\5\\node_modules\\claude-workspace\\scripts\\workspace.js'),
 			'pnpm'
 		);
+	});
+});
+
+describe('isEphemeralRun', () => {
+	const originalNpmCommand = process.env.npm_command;
+	after(() => {
+		if (originalNpmCommand === undefined) delete process.env.npm_command;
+		else process.env.npm_command = originalNpmCommand;
+	});
+
+	test('true when npm set npm_command=exec (npx / npm exec)', () => {
+		process.env.npm_command = 'exec';
+		assert.equal(isEphemeralRun('/usr/local/lib/node_modules/claude-workspace/scripts/workspace.js'), true);
+		delete process.env.npm_command;
+	});
+
+	test('true for an npm npx cache path even without the env var', () => {
+		assert.equal(isEphemeralRun('/home/user/.npm/_npx/abc123/node_modules/claude-workspace/scripts/workspace.js'), true);
+	});
+
+	test('true for a pnpm dlx cache path', () => {
+		assert.equal(isEphemeralRun('/home/user/.local/share/pnpm/dlx/abc123/node_modules/claude-workspace/scripts/workspace.js'), true);
+	});
+
+	test('false for a regular global npm install', () => {
+		delete process.env.npm_command;
+		assert.equal(isEphemeralRun('/usr/local/lib/node_modules/claude-workspace/scripts/workspace.js'), false);
 	});
 });
 

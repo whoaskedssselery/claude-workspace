@@ -201,12 +201,27 @@ async function listPresetNames(dir) {
 }
 
 /**
+ * Kebab-case-ish names only (letters, digits, dot, underscore, hyphen) — no
+ * "/", "\" or leading dot, so nothing built from user input (a preset name
+ * typed into the wizard, a skill name passed to `add`/`remove`) can ever
+ * resolve outside the directory it's joined into via ".." or an absolute
+ * path segment.
+ */
+const SAFE_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+function isSafeName(name) {
+	return typeof name === 'string' && SAFE_NAME_PATTERN.test(name);
+}
+
+/**
  * Built-in presets (PRESETS_DIR) take priority; falls back to custom
  * presets a user saved globally via the init wizard
  * (~/.claude-workspace/presets/), so `init <custom-name>` keeps working
  * non-interactively after it's been created once.
  */
 async function loadPreset(name) {
+	if (!isSafeName(name)) {
+		throw new Error(`Invalid preset name "${name}" — use only letters, digits, "-", "_" and ".".`);
+	}
 	const builtIn = path.join(PRESETS_DIR, `${name}.yaml`);
 	const custom = path.join(GLOBAL_PRESETS_DIR, `${name}.yaml`);
 	const file = existsSync(builtIn) ? builtIn : existsSync(custom) ? custom : null;
@@ -226,6 +241,7 @@ async function loadPreset(name) {
  * Code expects: .claude/skills/<name>/SKILL.md.
  */
 async function copySkill(kind, name, destDir) {
+	if (!isSafeName(name)) return false;
 	const src = path.join(SKILLS_DIR, kind, name);
 	if (!existsSync(path.join(src, 'SKILL.md'))) return false;
 	await fs.cp(src, path.join(destDir, name), { recursive: true });
@@ -544,8 +560,10 @@ async function removeSkills(targetDir, names) {
 		skills = skills.filter((n) => n !== name);
 		external = external.filter((n) => n !== name);
 
-		const dir = path.join(skillsDestDir, name);
-		if (existsSync(dir)) await fs.rm(dir, { recursive: true, force: true });
+		if (isSafeName(name)) {
+			const dir = path.join(skillsDestDir, name);
+			if (existsSync(dir)) await fs.rm(dir, { recursive: true, force: true });
+		}
 		if (wasExternal) warn(`"${name}" is no longer tracked, but the tool itself was NOT uninstalled — use its own uninstall command.`);
 	}
 
@@ -553,12 +571,6 @@ async function removeSkills(targetDir, names) {
 	console.log(`\nRemoved. Remaining: ${core.length + skills.length} skill(s); external: ${external.join(', ') || 'none'}.\n`);
 }
 
-/**
- * Best-effort `npm install -g claude-workspace@latest`, then `sync`. The
- * global update step is skipped gracefully (not treated as an error) when
- * it fails — e.g. the CLI was run via npx, which already always uses the
- * latest version, so there's nothing global to update.
- */
 /**
  * Update commands for every package manager that can install an npm-
  * registry package globally. `npx`/`dlx`/`bunx` don't need updating (they
@@ -586,23 +598,49 @@ function detectPackageManager(realScriptPath) {
 	return 'npm';
 }
 
-async function updatePackage(targetDir) {
-	let pm = 'npm';
-	try {
-		pm = detectPackageManager(await fs.realpath(process.argv[1] ?? __filename));
-	} catch {
-		// process.argv[1] not resolvable (e.g. run from a REPL) — default to npm.
-	}
-	const { command, args } = PACKAGE_MANAGER_UPDATE_COMMANDS[pm];
+/**
+ * True when this process was launched via a throwaway runner (npm's
+ * npx / `npm exec`, or an equivalent dlx run from pnpm/yarn) rather than a
+ * persistent global install. In that case there is no global copy to
+ * update — `npm install -g` would "succeed" but only leave behind an
+ * unwanted global install the user never asked for, since the next `npx`
+ * run always re-fetches latest regardless.
+ *
+ * `npm_command === 'exec'` is set by npm itself for both `npx` and
+ * `npm exec` (npm 7+) and is the reliable signal; the path fragment check
+ * is a best-effort fallback for pnpm/yarn dlx, whose cache directories are
+ * named accordingly. Not exhaustive (e.g. bunx has no equivalent public
+ * signal at the time of writing) — worst case for an undetected runner is
+ * the previous behavior, not a regression.
+ */
+function isEphemeralRun(realScriptPath) {
+	if (process.env.npm_command === 'exec') return true;
+	const normalized = realScriptPath.replace(/\\/g, '/').toLowerCase();
+	return normalized.includes('_npx/') || normalized.includes('/dlx/');
+}
 
-	console.log(`\nUpdating the global claude-workspace package (${command} ${args.join(' ')})...`);
+async function updatePackage(targetDir) {
+	let realScriptPath = __filename;
 	try {
-		await execFileAsync(command, args, { shell: true });
-		console.log('Package updated.');
-	} catch (error) {
-		warn(`Could not update the global package: ${error.message.split('\n')[0]}`);
-		warn('If you run this via npx/pnpm dlx/bunx, that already always uses the latest version — nothing to do here.');
-		warn(`If you installed globally, update it yourself: ${command} ${args.join(' ')}`);
+		realScriptPath = await fs.realpath(process.argv[1] ?? __filename);
+	} catch {
+		// process.argv[1] not resolvable (e.g. run from a REPL) — keep the default.
+	}
+
+	if (isEphemeralRun(realScriptPath)) {
+		console.log(
+			'\nRunning via npx/dlx — that already always uses the latest version, nothing to install.'
+		);
+	} else {
+		const { command, args } = PACKAGE_MANAGER_UPDATE_COMMANDS[detectPackageManager(realScriptPath)];
+		console.log(`\nUpdating the global claude-workspace package (${command} ${args.join(' ')})...`);
+		try {
+			await execFileAsync(command, args, { shell: true });
+			console.log('Package updated.');
+		} catch (error) {
+			warn(`Could not update the global package: ${error.message.split('\n')[0]}`);
+			warn(`If you installed globally, update it yourself: ${command} ${args.join(' ')}`);
+		}
 	}
 	await sync(targetDir);
 }
@@ -906,6 +944,7 @@ export {
 	renderMarkdownList,
 	editDistance,
 	suggestName,
+	isSafeName,
 	extractDescription,
 	truncate,
 	copySkill,
@@ -923,6 +962,7 @@ export {
 	removeSkills,
 	updatePackage,
 	detectPackageManager,
+	isEphemeralRun,
 	describeSkill,
 	listKnownNames,
 	SKILLS_DIR,
