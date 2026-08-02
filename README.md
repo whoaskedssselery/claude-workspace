@@ -26,6 +26,10 @@ yarn dlx claude-workspace init     # yarn
 bunx claude-workspace init         # bun
 ```
 
+If a plain `pnpm add -g claude-workspace` ever installs an unexpectedly old version, that's pnpm
+serving a stale local metadata cache, not this package — pin it explicitly to force a fresh
+resolve: `pnpm add -g claude-workspace@latest`.
+
 Already know what you want (CI, automation, repeat setup)? Skip the wizard by passing a preset name:
 
 ```bash
