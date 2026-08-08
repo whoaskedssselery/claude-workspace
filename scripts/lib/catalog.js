@@ -86,13 +86,17 @@ export function fetchLatestVersion({ timeout = 2500, url = 'https://registry.npm
  * `domain` places it alongside the portable skills in REMOTE_SKILLS for
  * catalog listing/wizard grouping purposes only — it has no effect on how
  * the tool is actually installed (still its own steps, never a skill copy).
- */
-/**
+ *
  * `extraDirs`: project-root folders a tool's own installer is known to
  * create *besides* .claude/skills/ — "hide" moves these into its stash too,
- * and "unhide" puts them back, same as everything else. Best-effort: an
- * installer that writes somewhere undocumented/unpredictable (ui-ux-pro-max
- * here) simply isn't listed, and hide won't know to touch it.
+ * and "unhide" puts them back, same as everything else (see
+ * KNOWN_EXTRA_DIRS below — hide checks for these unconditionally, not only
+ * for tools it recorded installing itself, since e.g. codegraph is a
+ * separate CLI a user runs by hand per the codegraph skill's own
+ * instructions, never through claude-workspace, so nothing here ever
+ * records it as "installed"). Best-effort: an installer that writes
+ * somewhere undocumented/unpredictable (ui-ux-pro-max here) simply isn't
+ * listed, and hide won't know to touch it.
  */
 export const EXTERNAL_TOOLS = {
 	impeccable: {
@@ -141,6 +145,25 @@ export const EXTERNAL_TOOLS = {
 			{ command: 'uipro', args: ['init', '--ai', 'claude'] },
 		],
 	},
+};
+
+/**
+ * Every project-root folder "hide" knows to sweep up alongside
+ * .claude/skills/, keyed by relative path: each EXTERNAL_TOOLS entry's own
+ * `extraDirs`, plus tools that aren't in EXTERNAL_TOOLS at all because
+ * claude-workspace never installs them itself — codegraph (a core skill,
+ * not an external tool) only *documents* how to install the separate
+ * CodeGraph MCP server; the user runs `codegraph install`/`codegraph init`
+ * by hand, which is why nothing in workspace.yaml ever records it as
+ * "installed" the way an external tool would be. Checked unconditionally
+ * (existence only, not against what a workspace.yaml happens to have
+ * recorded) so hide catches these even when they were set up outside
+ * claude-workspace's own tracking.
+ */
+export const KNOWN_EXTRA_DIRS = {
+	'.impeccable': 'impeccable',
+	'.agents': 'taste (legacy)',
+	'.codegraph': 'codegraph',
 };
 
 /**

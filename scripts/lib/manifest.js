@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 
 import { warn } from './log.js';
 import { GLOBAL_DIR } from './i18n.js';
-import { TEMPLATES_DIR, SKILLS_DIR, EXTERNAL_TOOLS, parseSimpleYaml, packageVersion, renderYamlList, renderMarkdownList } from './catalog.js';
+import { TEMPLATES_DIR, SKILLS_DIR, KNOWN_EXTRA_DIRS, packageVersion, renderYamlList, renderMarkdownList } from './catalog.js';
 
 export const GITIGNORE_MARKER_START = '# --- claude-workspace: local Claude Code state (do not remove this block) ---';
 export const GITIGNORE_MARKER_END = '# --- end claude-workspace ---';
@@ -138,23 +138,22 @@ export function hiddenDir(targetDir) {
 }
 
 /**
- * Moves an external tool's own extra project-root folders (EXTERNAL_TOOLS'
- * `extraDirs`, e.g. impeccable's .impeccable/) into the stash, one
- * subfolder per tool so unhide can put each back at its original path.
- * Only tools recorded in the workspace's `external:` list are considered —
- * an unrelated folder that happens to share a name is never touched.
+ * Moves every folder in KNOWN_EXTRA_DIRS that actually exists at the
+ * project root into the stash, one subfolder per entry so unhide can put
+ * each back at its original path. Checked unconditionally — not gated on
+ * what workspace.yaml happens to have recorded — since a tool like
+ * codegraph is never "installed" through claude-workspace's own tracking
+ * in the first place (see KNOWN_EXTRA_DIRS in catalog.js).
  */
-async function moveExtraDirs(targetDir, hidden, externalNames) {
+async function moveExtraDirs(targetDir, hidden) {
 	const moved = [];
-	for (const name of externalNames) {
-		for (const rel of EXTERNAL_TOOLS[name]?.extraDirs ?? []) {
-			const src = path.join(targetDir, rel);
-			if (!existsSync(src)) continue;
-			const stashName = `${name}__${rel.replace(/[\\/]/g, '_')}`;
-			await fs.mkdir(path.join(hidden, 'extra'), { recursive: true });
-			await fs.rename(src, path.join(hidden, 'extra', stashName));
-			moved.push({ rel, stashName });
-		}
+	for (const [rel, name] of Object.entries(KNOWN_EXTRA_DIRS)) {
+		const src = path.join(targetDir, rel);
+		if (!existsSync(src)) continue;
+		const stashName = `${name}__${rel.replace(/[\\/]/g, '_')}`;
+		await fs.mkdir(path.join(hidden, 'extra'), { recursive: true });
+		await fs.rename(src, path.join(hidden, 'extra', stashName));
+		moved.push({ rel, stashName });
 	}
 	return moved;
 }
@@ -162,12 +161,12 @@ async function moveExtraDirs(targetDir, hidden, externalNames) {
 /**
  * Temporarily moves everything claude-workspace put into a project —
  * .claude/skills/, .claude/workspace.yaml, the generated block in
- * CLAUDE.md, and any external tool's own extra folders (EXTERNAL_TOOLS'
- * `extraDirs`, e.g. impeccable's .impeccable/) — out of the project
- * entirely, into the stash (see hiddenDir above), so the project looks
- * exactly like it did before `init` ever ran and nothing claude-workspace-
- * related is left sitting in the project tree. Never touches the project's
- * own .gitignore.
+ * CLAUDE.md, and any known companion tool's own folder (KNOWN_EXTRA_DIRS
+ * in catalog.js — impeccable's .impeccable/, codegraph's .codegraph/, ...)
+ * — out of the project entirely, into the stash (see hiddenDir above), so
+ * the project looks exactly like it did before `init` ever ran and nothing
+ * claude-workspace-related is left sitting in the project tree. Never
+ * touches the project's own .gitignore.
  *
  * This is a stash, not a sync: `unhideWorkspace` restores the pre-hide
  * snapshot byte-for-byte rather than trying to merge in whatever changed
@@ -183,8 +182,6 @@ export async function hideWorkspace(targetDir) {
 	if (!existsSync(workspacePath)) {
 		throw new Error(`No .claude/workspace.yaml found in ${targetDir} — nothing to hide.`);
 	}
-
-	const manifest = parseSimpleYaml(await fs.readFile(workspacePath, 'utf8'));
 
 	await fs.mkdir(hidden, { recursive: true });
 
@@ -210,7 +207,7 @@ export async function hideWorkspace(targetDir) {
 		}
 	}
 
-	const extraDirs = await moveExtraDirs(targetDir, hidden, manifest.external ?? []);
+	const extraDirs = await moveExtraDirs(targetDir, hidden);
 	if (extraDirs.length) {
 		await fs.writeFile(path.join(hidden, 'extra-dirs.json'), JSON.stringify(extraDirs, null, 2) + '\n', 'utf8');
 	}

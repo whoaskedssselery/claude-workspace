@@ -703,26 +703,30 @@ describe('hide / unhide', () => {
 		}
 	});
 
-	test('hide also sweeps up a recorded external tool\'s extra folders, and unhide puts them back', async () => {
+	test('hide sweeps up known companion-tool folders even when workspace.yaml never recorded them, and unhide puts them back', async () => {
 		const dir = tmpDir();
 		try {
 			await init('oss-contribution', dir, {});
-			// Simulate impeccable having been installed: its own installer
-			// dropped a .impeccable/ config dir, and it's recorded as an
-			// external tool in workspace.yaml.
+			// impeccable and codegraph are both installed outside
+			// claude-workspace's own tracking — impeccable via its installer's
+			// steps (never recorded as "external" if run by hand), codegraph
+			// via its own separate CLI per the codegraph skill's instructions
+			// (never recorded at all). Neither shows up in workspace.yaml, so
+			// this simulates them existing with nothing else changed.
 			await fs.mkdir(path.join(dir, '.impeccable'), { recursive: true });
 			await fs.writeFile(path.join(dir, '.impeccable', 'config.json'), '{}', 'utf8');
-			const workspacePath = path.join(dir, '.claude', 'workspace.yaml');
-			let workspaceYaml = await fs.readFile(workspacePath, 'utf8');
-			workspaceYaml = workspaceYaml.replace('external:\n  []', 'external:\n  - impeccable');
-			await fs.writeFile(workspacePath, workspaceYaml, 'utf8');
+			await fs.mkdir(path.join(dir, '.codegraph'), { recursive: true });
+			await fs.writeFile(path.join(dir, '.codegraph', 'index.db'), 'fake-index', 'utf8');
 
 			await hide(dir);
 			assert.equal(existsSync(path.join(dir, '.impeccable')), false);
+			assert.equal(existsSync(path.join(dir, '.codegraph')), false);
 			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'impeccable__.impeccable', 'config.json')), true);
+			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'codegraph__.codegraph', 'index.db')), true);
 
 			await unhide(dir);
 			assert.equal(existsSync(path.join(dir, '.impeccable', 'config.json')), true);
+			assert.equal(existsSync(path.join(dir, '.codegraph', 'index.db')), true);
 			assert.equal(existsSync(hiddenDir(dir)), false);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
