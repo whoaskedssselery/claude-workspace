@@ -19,16 +19,18 @@ import {
 	PRESETS_DIR,
 	DOMAIN_DIRS,
 	EXTERNAL_TOOLS,
+	REMOTE_SKILLS,
+	namesInDomain,
 	isSafeName,
 	loadPreset,
 	listPresetNames,
 	projectPresetsDir,
 	copySkill,
-	copyDomainSkill,
 	installExternalTool,
 	listKnownNames,
 	suggestName,
 	describeSkill,
+	truncate,
 	parseSimpleYaml,
 	packageVersion,
 } from './catalog.js';
@@ -82,6 +84,7 @@ export async function installPreset(preset, presetName, targetDir, { withExterna
 	const installedSkills = [];
 	const installedExternal = [];
 	const installedRemote = [];
+	const remoteNames = new Set();
 	for (const name of requestedNames) {
 		// A preset's skills: list (or --with=) can name a remote source too —
 		// not just this package's own catalog — so a custom preset can bundle
@@ -96,7 +99,10 @@ export async function installPreset(preset, presetName, targetDir, { withExterna
 				warn(`nothing new appeared in .claude/skills/ from "${name}" — not recorded`);
 				continue;
 			}
-			for (const addedName of added) installedRemote.push({ name: addedName, source: name });
+			for (const addedName of added) {
+				installedRemote.push({ name: addedName, source: name });
+				remoteNames.add(addedName);
+			}
 			continue;
 		}
 		const external = EXTERNAL_TOOLS[name];
@@ -111,9 +117,30 @@ export async function installPreset(preset, presetName, targetDir, { withExterna
 			if (ok) installedExternal.push(name);
 			continue;
 		}
-		const ok = await copyDomainSkill(name, skillsDestDir);
-		if (ok) {
+		// A format variant (spike, assignment-defend) is still vendored in this
+		// repo, same as core — copied directly rather than fetched.
+		if (await copySkill('formats', name, skillsDestDir)) {
 			installedSkills.push(name);
+			continue;
+		}
+		// Everything else in the catalog (frontend/backend/design/... skills) is
+		// fetched on demand from its author's own repo, pinned to one skill —
+		// see REMOTE_SKILLS in catalog.js and remote.js's fetchRemoteSkill.
+		const catalogEntry = REMOTE_SKILLS[name];
+		if (catalogEntry) {
+			if (remoteNames.has(name)) {
+				warn(`"${name}" was already fetched — skipped`);
+				continue;
+			}
+			const added = await fetchRemoteSkill(targetDir, catalogEntry.source, { skill: catalogEntry.skillName });
+			if (!added.length) {
+				warn(`nothing new appeared in .claude/skills/ from "${name}" (${catalogEntry.source}) — not recorded`);
+				continue;
+			}
+			for (const addedName of added) {
+				installedRemote.push({ name: addedName, source: catalogEntry.source });
+				remoteNames.add(addedName);
+			}
 			continue;
 		}
 		const suggestion = suggestName(name, await listKnownNames());
@@ -170,18 +197,47 @@ export async function sync(targetDir) {
 		if (await copySkill('core', name, skillsDestDir)) updated++;
 		else warn(`core skill "${name}" not found in ${SKILLS_DIR}/core — skipped`);
 	}
-	for (const name of manifest.skills ?? []) {
-		if (await copyDomainSkill(name, skillsDestDir)) updated++;
-		else warn(`"${name}" isn't a known skill — skipped (external tools aren't refreshed by sync)`);
-	}
 
 	const remote = decodeRemoteList(manifest.remote);
+	const remoteNames = new Set(remote.map((r) => r.name));
+
+	// manifest.skills is now only ever format variants (spike,
+	// assignment-defend — still vendored in this repo, refreshed by copy) —
+	// except for a workspace.yaml written before domain skills moved to
+	// remote, where it may still list one by its old name; migrate that into
+	// the remote: list instead of failing to find it.
+	const remainingSkills = [];
+	for (const name of manifest.skills ?? []) {
+		if (await copySkill('formats', name, skillsDestDir)) {
+			updated++;
+			remainingSkills.push(name);
+			continue;
+		}
+		const catalogEntry = REMOTE_SKILLS[name];
+		if (catalogEntry) {
+			if (!remoteNames.has(name)) {
+				const added = await fetchRemoteSkill(targetDir, catalogEntry.source, { skill: catalogEntry.skillName });
+				if (added.length) updated++;
+				for (const addedName of added) {
+					remote.push({ name: addedName, source: catalogEntry.source });
+					remoteNames.add(addedName);
+				}
+			}
+			continue;
+		}
+		warn(`"${name}" isn't a known skill — skipped (external tools aren't refreshed by sync)`);
+	}
+
 	for (const { name, source } of remote) {
 		if (!source) {
 			warn(`remote skill "${name}" has no recorded source — re-add it with "claude-workspace add <url>"`);
 			continue;
 		}
-		const added = await fetchRemoteSkill(targetDir, source);
+		// Pin back to the single skill this name resolves to in the catalog, if
+		// any — otherwise a multi-skill source (e.g. Jeffallan/claude-skills)
+		// would re-fetch every skill it has, not just the one that was added.
+		const catalogEntry = REMOTE_SKILLS[name];
+		const added = await fetchRemoteSkill(targetDir, source, catalogEntry ? { skill: catalogEntry.skillName } : {});
 		if (added.length) updated++;
 		else warn(`could not refresh remote skill "${name}" from ${source}`);
 	}
@@ -190,7 +246,7 @@ export async function sync(targetDir) {
 		targetDir,
 		manifest.preset ?? 'custom',
 		manifest.core ?? [],
-		manifest.skills ?? [],
+		remainingSkills,
 		manifest.external ?? [],
 		remote
 	);
@@ -198,7 +254,7 @@ export async function sync(targetDir) {
 		targetDir,
 		manifest.preset ?? 'custom',
 		manifest.core ?? [],
-		[...(manifest.skills ?? []), ...(manifest.external ?? []), ...remote.map((r) => r.name)],
+		[...remainingSkills, ...(manifest.external ?? []), ...remote.map((r) => r.name)],
 		{ force: false }
 	);
 
@@ -246,7 +302,7 @@ export async function doctor(targetDir) {
 		console.log(`  core      ${name.padEnd(24)} ${await checkSkillStatus('core', name, installedSkillsDir)}`);
 	}
 	for (const name of manifest.skills ?? []) {
-		console.log(`  skill     ${name.padEnd(24)} ${await checkSkillStatus('domain', name, installedSkillsDir)}`);
+		console.log(`  skill     ${name.padEnd(24)} ${await checkSkillStatus('formats', name, installedSkillsDir)}`);
 	}
 	for (const { name, source } of decodeRemoteList(manifest.remote)) {
 		const present = existsSync(path.join(installedSkillsDir, name, 'SKILL.md'));
@@ -349,9 +405,22 @@ export async function addSkills(targetDir, names, { global = false, skill = null
 			if (ok) external.add(name);
 			continue;
 		}
-		const ok = await copyDomainSkill(name, skillsDestDir);
-		if (ok) {
+		if (await copySkill('formats', name, skillsDestDir)) {
 			skills.add(name);
+			continue;
+		}
+		const catalogEntry = REMOTE_SKILLS[name];
+		if (catalogEntry) {
+			const added = await fetchRemoteSkill(targetDir, catalogEntry.source, { skill: catalogEntry.skillName });
+			if (!added.length) {
+				warn(`nothing new appeared in .claude/skills/ from "${name}" (${catalogEntry.source}) — not recorded`);
+				continue;
+			}
+			for (const addedName of added) {
+				if (remoteNames.has(addedName)) continue;
+				remote.push({ name: addedName, source: catalogEntry.source });
+				remoteNames.add(addedName);
+			}
 			continue;
 		}
 		if (isSafeName(name) && existsSync(path.join(SKILLS_DIR, 'core', name, 'SKILL.md'))) {
@@ -501,21 +570,27 @@ export async function list({ installedOnly = false, global = false, targetDir = 
 		console.log(`  ${name.padEnd(20)} ${await describeSkill('core', name)}`);
 	}
 
-	console.log('\nAttachable skills (add with --with=<name>, from any preset):\n');
+	console.log('\nFormat variants (add with --with=<name>, relevant presets only):\n');
+	for (const name of (await fs.readdir(path.join(SKILLS_DIR, 'formats'))).sort()) {
+		console.log(`  ${name.padEnd(20)} ${await describeSkill('formats', name)}`);
+	}
+
+	console.log(
+		'\nAttachable skills (add with --with=<name>, from any preset — fetched from their own repo on first use; external tools need their own installer, run with --with=<name> or --with-external):\n'
+	);
 	for (const kind of DOMAIN_DIRS) {
-		const dir = path.join(SKILLS_DIR, kind);
-		if (!existsSync(dir)) continue;
-		const names = (await fs.readdir(dir)).sort();
+		const names = namesInDomain(kind);
 		if (!names.length) continue;
 		console.log(`  ${kind}/`);
 		for (const name of names) {
-			console.log(`    ${name.padEnd(22)} ${await describeSkill(kind, name)}`);
+			const skill = REMOTE_SKILLS[name];
+			if (skill) {
+				console.log(`    ${name.padEnd(22)} ${truncate(skill.description)}  (from ${skill.source})`);
+				continue;
+			}
+			const tool = EXTERNAL_TOOLS[name];
+			console.log(`    ${name.padEnd(22)} ${tool.url}  (external tool, own installer)`);
 		}
-	}
-
-	console.log('\nExternal tools (own installer — need --with=<name> or --with-external to actually install):\n');
-	for (const [name, tool] of Object.entries(EXTERNAL_TOOLS)) {
-		console.log(`  ${name.padEnd(18)} ${tool.url}`);
 	}
 	console.log('');
 }

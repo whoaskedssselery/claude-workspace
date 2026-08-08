@@ -42,7 +42,7 @@ describe('custom presets (saved globally)', () => {
 		await fs.mkdir(GLOBAL_PRESETS_DIR, { recursive: true });
 		await fs.writeFile(
 			path.join(GLOBAL_PRESETS_DIR, 'my-custom.yaml'),
-			'name: my-custom\n\ncore:\n  - commit-discipline\n\nskills:\n  - api-designer\n',
+			'name: my-custom\n\ncore:\n  - commit-discipline\n\nskills:\n  - spike\n',
 			'utf8'
 		);
 	});
@@ -51,7 +51,7 @@ describe('custom presets (saved globally)', () => {
 		const preset = await loadPreset('my-custom');
 		assert.equal(preset.name, 'my-custom');
 		assert.deepEqual(preset.core, ['commit-discipline']);
-		assert.deepEqual(preset.skills, ['api-designer']);
+		assert.deepEqual(preset.skills, ['spike']);
 	});
 
 	test('init installs a custom preset the same way as a built-in one', async () => {
@@ -59,7 +59,7 @@ describe('custom presets (saved globally)', () => {
 		try {
 			await init('my-custom', dir, {});
 			assert.ok(existsSync(path.join(dir, '.claude', 'skills', 'commit-discipline', 'SKILL.md')));
-			assert.ok(existsSync(path.join(dir, '.claude', 'skills', 'api-designer', 'SKILL.md')));
+			assert.ok(existsSync(path.join(dir, '.claude', 'skills', 'spike', 'SKILL.md')));
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
@@ -103,15 +103,15 @@ describe('addSkills / removeSkills', () => {
 		try {
 			await init('oss-contribution', dir, {});
 
-			await addSkills(dir, ['api-designer']);
-			assert.ok(existsSync(path.join(dir, '.claude', 'skills', 'api-designer', 'SKILL.md')));
+			await addSkills(dir, ['spike']);
+			assert.ok(existsSync(path.join(dir, '.claude', 'skills', 'spike', 'SKILL.md')));
 			let workspaceYaml = await fs.readFile(path.join(dir, '.claude', 'workspace.yaml'), 'utf8');
-			assert.match(workspaceYaml, /skills:\s*\n\s*- api-designer/);
+			assert.match(workspaceYaml, /skills:\s*\n\s*- spike/);
 
-			await removeSkills(dir, ['api-designer']);
-			assert.equal(existsSync(path.join(dir, '.claude', 'skills', 'api-designer')), false);
+			await removeSkills(dir, ['spike']);
+			assert.equal(existsSync(path.join(dir, '.claude', 'skills', 'spike')), false);
 			workspaceYaml = await fs.readFile(path.join(dir, '.claude', 'workspace.yaml'), 'utf8');
-			assert.doesNotMatch(workspaceYaml, /api-designer/);
+			assert.doesNotMatch(workspaceYaml, /spike/);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}

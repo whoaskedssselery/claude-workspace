@@ -289,7 +289,6 @@ export {
 	extractDescription,
 	truncate,
 	copySkill,
-	copyDomainSkill,
 	loadPreset,
 	listPresetNames,
 	projectPresetsDir,
@@ -302,6 +301,8 @@ export {
 	TEMPLATES_DIR,
 	DOMAIN_DIRS,
 	EXTERNAL_TOOLS,
+	REMOTE_SKILLS,
+	namesInDomain,
 } from './lib/catalog.js';
 
 export {

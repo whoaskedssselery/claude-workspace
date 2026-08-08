@@ -10,10 +10,13 @@ import {
 	SKILLS_DIR,
 	DOMAIN_DIRS,
 	EXTERNAL_TOOLS,
+	REMOTE_SKILLS,
+	namesInDomain,
 	loadPreset,
 	listPresetNames,
 	installPreset,
 	describeSkill,
+	truncate,
 	isSafeName,
 	projectPresetsDir,
 	looksLikeSkillSource,
@@ -32,12 +35,22 @@ async function domainSkillNames(kind) {
 	return (await fs.readdir(dir)).sort();
 }
 
-async function buildDomainGroup(kind, excluded) {
-	const names = (await domainSkillNames(kind)).filter((name) => !excluded.has(name));
+/**
+ * One checkbox group for a catalog domain (frontend/, backend/, ...) — items
+ * come from REMOTE_SKILLS (fetched from their author's repo on first use)
+ * and EXTERNAL_TOOLS (own installer) that share that domain, not from a
+ * physical skills/<kind>/ directory: only skills/core and skills/formats are
+ * still vendored in this repo.
+ */
+function buildDomainGroup(kind, excluded) {
+	const names = namesInDomain(kind).filter((name) => !excluded.has(name));
 	if (!names.length) return null;
-	const items = await Promise.all(
-		names.map(async (name) => ({ label: name, value: name, hint: await describeSkill(kind, name) }))
-	);
+	const items = names.map((name) => {
+		const skill = REMOTE_SKILLS[name];
+		if (skill) return { label: name, value: name, hint: truncate(skill.description) };
+		const tool = EXTERNAL_TOOLS[name];
+		return { label: name, value: name, hint: tool.url };
+	});
 	return { title: `${kind}/`, items };
 }
 
@@ -52,34 +65,24 @@ async function buildFormatGroup(presetName, excluded) {
 	return { title: null, items };
 }
 
-function externalToolsGroup(excluded) {
-	const items = Object.entries(EXTERNAL_TOOLS)
-		.filter(([name]) => !excluded.has(name))
-		.map(([name, tool]) => ({ label: name, value: name, hint: tool.url }));
-	return items.length ? { title: null, items } : null;
-}
-
 /**
  * Additional-skills folders for an existing preset — one folder per domain
- * (frontend/, backend/, ...), relevant format variants, external tools.
- * One group per folder (not merged into one flat list) so each is small
- * enough to fit a terminal screen — see folderCheckbox in prompt.js.
+ * (frontend/, backend/, ...), each mixing catalog skills and external tools,
+ * plus relevant format variants. One group per folder (not merged into one
+ * flat list) so each is small enough to fit a terminal screen — see
+ * folderCheckbox in prompt.js.
  */
 async function buildAdditionalGroups(lang, presetName, alreadyIncluded) {
 	const excluded = new Set(alreadyIncluded);
 	const groups = [];
 
 	for (const kind of DOMAIN_DIRS) {
-		if (kind === 'formats') continue;
-		const group = await buildDomainGroup(kind, excluded);
+		const group = buildDomainGroup(kind, excluded);
 		if (group) groups.push(group);
 	}
 
 	const formatGroup = await buildFormatGroup(presetName, excluded);
 	if (formatGroup) groups.push({ title: t(lang, 'formatVariantsHeader'), items: formatGroup.items });
-
-	const externalGroup = externalToolsGroup(excluded);
-	if (externalGroup) groups.push({ title: t(lang, 'externalToolsHeader'), items: externalGroup.items });
 
 	return groups;
 }
@@ -95,11 +98,9 @@ async function buildFullCatalogGroups(lang) {
 		groups.push({ title: 'core/', items });
 	}
 	for (const kind of DOMAIN_DIRS) {
-		const group = await buildDomainGroup(kind, new Set());
+		const group = buildDomainGroup(kind, new Set());
 		if (group) groups.push(group);
 	}
-	const externalGroup = externalToolsGroup(new Set());
-	if (externalGroup) groups.push({ title: t(lang, 'externalToolsHeader'), items: externalGroup.items });
 	return groups;
 }
 

@@ -60,7 +60,7 @@ with `--with=` (next section).
 | `learning` | [learning-guard](skills/core/learning-guard/SKILL.md) + [teacher](skills/core/teacher/SKILL.md): the human writes the code, Claude teaches and reviews instead of writing it for you. | Learning a technology. Add the tech with `--with=` — e.g. `--with=react-best-practices`. |
 | `project` | Normal coding, no restrictions, plus [health-review](skills/core/health-review/SKILL.md) and [commit-discipline](skills/core/commit-discipline/SKILL.md). | Day-to-day work on a real project. Add `--with=spike` for a specific throwaway/exploratory task. |
 | `assignment` | [assignment-mode](skills/core/assignment-mode/SKILL.md): Claude can write the solution, but verifies it works and stays inside the stated requirements. | Coursework, take-home tests, graded exercises. Add `--with=assignment-defend` if you'll have to explain the work to a grader. |
-| `redesign` | Drops the learning restrictions, adds [react-best-practices](skills/frontend/react-best-practices/SKILL.md). | Visual/UI work. Add `--with=claude-design` for structured design-artifact work. |
+| `redesign` | Drops the learning restrictions, adds `react-best-practices`. | Visual/UI work. Add `--with=claude-design` for structured design-artifact work. |
 | `oss-contribution` | Minimal, convention-following diffs. | Contributing to someone else's repository. |
 | `debug` | [debug-mode](skills/core/debug-mode/SKILL.md): forces reproduce → isolate → diagnose → fix, in that order, instead of trial-and-error guessing. | Chasing a real bug, especially one that's already survived a session or two of guess-and-check. |
 
@@ -80,23 +80,30 @@ claude-workspace init project . --with=spike
 ```
 
 Run `claude-workspace list` to see every preset, skill and external tool this package knows about,
-with a one-line description — the full catalog is large enough that it's easier to check this than
-to read the repo. A misspelled name suggests the closest match instead of failing silently:
+grouped by domain (`frontend/`, `backend/`, `design/`, ...) with a one-line description — the full
+catalog is large enough that it's easier to check this than to read the repo. A misspelled name
+suggests the closest match instead of failing silently:
 
 ```
 ! "databse-optimizer" isn't a known skill or external tool — skipped (did you mean "database-optimizer"?)
 ```
 
-### External tools
+### Where a skill's files actually come from
+
+Only `skills/core/` (this project's own behavioral skills) and `skills/formats/` (small,
+also-original variants like `spike`/`assignment-defend`) are vendored — their files live in this
+repo and are copied straight from the installed package. Every tech-specific skill in the catalog
+(`react-expert`, `api-designer`, `kubernetes-specialist`, ...) is fetched on demand from its own
+author's repository the first time you pick it — same mechanism as [`add
+<url>`](#adding-a-skill-from-any-repository) below, just pre-wired to the right source — and the
+fetched copy plus its source are recorded in `workspace.yaml` so `sync`/`doctor`/`remove` know
+about it too. See [Attribution](#attribution) for exactly which repo each one comes from.
 
 A few names in the catalog (`impeccable`, `superpowers`, `taste`, `ui-ux-pro-max`) aren't skill
-files — they're separate tools with their own installer or plugin marketplace. `init` never
+files at all — they're separate tools with their own installer or plugin marketplace. `init` never
 installs these automatically; by default it only prints the install command. Add `--with=<name>`
 to actually run that tool's installer, or `--with-external` to install every external tool the
 chosen preset lists.
-
-This is different from [`add <url>`](#adding-a-skill-from-any-repository) below: external tools are
-full separate projects, while `add` fetches a portable skill file into `.claude/skills/`.
 
 ## Adding a skill from any repository
 
@@ -170,8 +177,9 @@ claude-workspace init
 
 It walks through the same decisions step by step: **language** (Russian/English, remembered after
 the first run) → **preset** (built-in, a saved custom one, or build one now) → **additional
-skills** (checkbox list: domain skills, relevant format variants, external tools, each with a hint
-from its `SKILL.md`) → confirm and install.
+skills** (checkbox list grouped by domain — frontend/, backend/, design/, ... — each mixing catalog
+skills and external tools with a one-line hint, plus relevant format variants) → confirm and
+install.
 
 **Keyboard:** arrow keys or `j`/`k` to move, `space` to toggle, digits `1`-`9` to jump to (and
 toggle) an item, `a`/`n` to select all/none, `enter` to confirm, `esc`/`Ctrl+C` to cancel without
@@ -209,7 +217,9 @@ scripts/lib/colors.js    ANSI styling helpers
 scripts/lib/log.js       shared console warn/log helpers
 
 presets/    built-in preset definitions (.yaml)
-skills/     the skill catalog, one directory per skill under skills/<domain>/<name>/SKILL.md
+skills/     only what's original to this project: skills/core/<name>/SKILL.md (behavior, every
+            preset) and skills/formats/<name>/SKILL.md (optional variants, e.g. spike). Everything
+            else in the catalog (REMOTE_SKILLS in catalog.js) is fetched from its own repo instead.
 templates/  CLAUDE.md and workspace.yaml templates used when generating a project's files
 test/       the test suite (Node's built-in test runner)
 ```
@@ -243,9 +253,11 @@ exercised manually rather than in CI.
 
 ## Attribution
 
-This package's own code is MIT (see [LICENSE](LICENSE)), but several skills under `skills/` are
-vendored from other MIT-licensed projects rather than written for this repo. Each keeps its
-original license and authorship; nothing here relicenses or claims them as original work.
+This package's own code is MIT (see [LICENSE](LICENSE)). Nothing under `skills/` besides
+`skills/core/` and `skills/formats/` is vendored in this repo at all — every tech-specific skill in
+the catalog is fetched, on first use, straight from its original author's repository (see [Where a
+skill's files actually come from](#where-a-skills-files-actually-come-from)). Each keeps its own
+license and authorship; nothing here relicenses or claims them as original work.
 
 | Source | License | Skills |
 |---|---|---|
@@ -255,11 +267,11 @@ original license and authorship; nothing here relicenses or claims them as origi
 
 Everything under `skills/core/` and `skills/formats/` (`learning-guard`, `teacher`, `health-review`,
 `commit-discipline`, `assignment-mode`, `codegraph`, `assignment-defend`, `spike`) is original to
-this project, not vendored.
+this project and is the only thing actually vendored here.
 
-External tools (`impeccable`, `superpowers`, `taste`, `ui-ux-pro-max` — see [External
-tools](#external-tools)) aren't vendored at all: `init`/`add` only ever run their own installer, so
-their code lives and stays in their own repositories.
+External tools (`impeccable`, `superpowers`, `taste`, `ui-ux-pro-max`) aren't vendored either:
+`init`/`add` only ever run their own installer, so their code lives and stays in their own
+repositories.
 
 ## License
 

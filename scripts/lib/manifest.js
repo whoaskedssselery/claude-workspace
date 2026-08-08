@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { warn } from './log.js';
-import { TEMPLATES_DIR, SKILLS_DIR, DOMAIN_DIRS, packageVersion, renderYamlList, renderMarkdownList } from './catalog.js';
+import { TEMPLATES_DIR, SKILLS_DIR, packageVersion, renderYamlList, renderMarkdownList } from './catalog.js';
 
 export const GITIGNORE_MARKER_START = '# --- claude-workspace: local Claude Code state (do not remove this block) ---';
 export const GITIGNORE_MARKER_END = '# --- end claude-workspace ---';
@@ -119,27 +119,21 @@ export async function writeClaudeMd(targetDir, presetName, core, skills, { force
 	return 'appended';
 }
 
-/** Finds which domain folder (if any) currently has this skill, for doctor's staleness check. */
-function findDomainSkillSource(name) {
-	for (const kind of DOMAIN_DIRS) {
-		const dir = path.join(SKILLS_DIR, kind, name);
-		if (existsSync(path.join(dir, 'SKILL.md'))) return dir;
-	}
-	return null;
-}
-
 /**
  * Compares an installed skill's SKILL.md against the version currently in
- * this package. Only checks SKILL.md itself (not reference files) — good
- * enough signal for "this has changed upstream, run sync" without a full
- * recursive diff.
+ * this package. Only meaningful for `kind`s this package actually vendors
+ * (`core`, `formats`) — everything else (REMOTE_SKILLS, external tools) is
+ * fetched from its own author's repo, not shipped here, so there's nothing
+ * local to diff against; doctor checks those for presence only. Only checks
+ * SKILL.md itself (not reference files) — good enough signal for "this has
+ * changed upstream, run sync" without a full recursive diff.
  */
 export async function checkSkillStatus(kind, name, installedSkillsDir) {
 	const installedSkillMd = path.join(installedSkillsDir, name, 'SKILL.md');
 	if (!existsSync(installedSkillMd)) return 'missing';
 
-	const sourceDir = kind === 'core' ? path.join(SKILLS_DIR, 'core', name) : findDomainSkillSource(name);
-	if (!sourceDir) return 'no longer in this package';
+	const sourceDir = path.join(SKILLS_DIR, kind, name);
+	if (!existsSync(path.join(sourceDir, 'SKILL.md'))) return 'no longer in this package';
 
 	const [installedContent, sourceContent] = await Promise.all([
 		fs.readFile(installedSkillMd, 'utf8'),

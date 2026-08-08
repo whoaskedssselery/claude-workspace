@@ -83,19 +83,25 @@ export function fetchLatestVersion({ timeout = 2500, url = 'https://registry.npm
  * server or plugin marketplace) rather than a static skill file we can copy.
  * Listing a name here in a preset's `skills:` lets `init` install it for
  * real via its own non-interactive CLI, instead of just linking to it.
+ * `domain` places it alongside the portable skills in REMOTE_SKILLS for
+ * catalog listing/wizard grouping purposes only — it has no effect on how
+ * the tool is actually installed (still its own steps, never a skill copy).
  */
 export const EXTERNAL_TOOLS = {
 	impeccable: {
+		domain: 'design',
 		url: 'https://github.com/pbakaus/impeccable',
 		manualInstall: 'npx impeccable install',
 		steps: [{ command: 'npx', args: ['impeccable', 'install', '--providers=claude', '--scope=project'] }],
 	},
 	superpowers: {
+		domain: 'general',
 		url: 'https://github.com/obra/superpowers',
 		manualInstall: 'npx skills add obra/superpowers --agent claude-code --copy',
 		steps: [{ command: 'npx', args: ['skills', 'add', 'obra/superpowers', '--agent', 'claude-code', '--copy', '-y'] }],
 	},
 	taste: {
+		domain: 'design',
 		url: 'https://github.com/Leonxlnx/taste-skill',
 		manualInstall: 'npx skills add https://github.com/Leonxlnx/taste-skill --skill "design-taste-frontend"',
 		steps: [
@@ -106,6 +112,7 @@ export const EXTERNAL_TOOLS = {
 		],
 	},
 	'ui-ux-pro-max': {
+		domain: 'design',
 		url: 'https://github.com/nextlevelbuilder/ui-ux-pro-max-skill',
 		manualInstall: 'npm install -g ui-ux-pro-max-cli && uipro init --ai claude',
 		steps: [
@@ -116,28 +123,198 @@ export const EXTERNAL_TOOLS = {
 };
 
 /**
- * Domain folders that hold vendored, portable skills (as opposed to
- * skills/core, which is copied into every preset regardless of domain).
- * `formats` holds optional behavioral variants (assignment-defend, spike)
- * that attach to a preset's baseline behavior via --with=, the same way a
- * tech skill does. `general` holds cross-cutting skills (code review,
- * debugging, testing strategy) that aren't tied to one domain.
+ * Portable skills this package knows *about* but does not vendor a copy of —
+ * only `skills/core` (this project's own work) and `skills/formats` (small
+ * behavioral variants, also original to this project) ship as files in this
+ * repo. Everything else is fetched on demand from its original author's repo
+ * via the same `npx skills add` mechanism as `add <url>` (see remote.js),
+ * pinned to one skill with `--skill <skillName>` so a multi-skill source repo
+ * doesn't pull in siblings the user didn't ask for.
  */
-export const DOMAIN_DIRS = ['frontend', 'design', 'backend', 'fullstack', 'ml', 'devops', 'general', 'planning', 'formats'];
+export const REMOTE_SKILLS = {
+	'react-best-practices': {
+		domain: 'frontend',
+		source: 'vercel-labs/agent-skills',
+		skillName: 'react-best-practices',
+		description: 'React and Next.js performance optimization guidelines from Vercel Engineering.',
+	},
+	'claude-design': {
+		domain: 'design',
+		source: 'jiji262/claude-design-skill',
+		skillName: 'claude-design',
+		description:
+			'Produce thoughtful, high-fidelity design artifacts in HTML — landing pages, slide decks, interactive prototypes, animated videos, posters, wireframes, and visual explorations.',
+	},
+	'api-designer': {
+		domain: 'backend',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'api-designer',
+		description: 'Use when designing REST or GraphQL APIs, creating OpenAPI specifications, or planning API architecture.',
+	},
+	'security-reviewer': {
+		domain: 'backend',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'security-reviewer',
+		description: 'Identifies security vulnerabilities, generates structured audit reports with severity ratings, and provides actionable remediation guidance.',
+	},
+	'database-optimizer': {
+		domain: 'backend',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'database-optimizer',
+		description: 'Optimizes database queries and improves performance across PostgreSQL and MySQL systems.',
+	},
+	'microservices-architect': {
+		domain: 'backend',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'microservices-architect',
+		description: 'Designs distributed system architectures, decomposes monoliths into bounded-context services, recommends communication patterns.',
+	},
+	'websocket-engineer': {
+		domain: 'backend',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'websocket-engineer',
+		description: 'Use when building real-time communication systems with WebSockets or Socket.IO.',
+	},
+	'react-expert': {
+		domain: 'frontend',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'react-expert',
+		description: 'Use when building React 18+ applications in .jsx or .tsx files, Next.js App Router projects, or create-react-app setups.',
+	},
+	'vue-expert': {
+		domain: 'frontend',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'vue-expert',
+		description: 'Builds Vue 3 components with Composition API patterns, configures Nuxt 3 SSR/SSG projects, sets up Pinia stores.',
+	},
+	'graphql-architect': {
+		domain: 'frontend',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'graphql-architect',
+		description: 'Use when designing GraphQL schemas, implementing Apollo Federation, or building real-time subscriptions.',
+	},
+	'fullstack-guardian': {
+		domain: 'fullstack',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'fullstack-guardian',
+		description: 'Builds security-focused full-stack web applications by implementing integrated frontend and backend components with layered security.',
+	},
+	'ml-pipeline': {
+		domain: 'ml',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'ml-pipeline',
+		description: 'Designs and implements production-grade ML pipeline infrastructure: experiment tracking, feature engineering, training pipelines.',
+	},
+	'rag-architect': {
+		domain: 'ml',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'rag-architect',
+		description: 'Designs and implements production-grade RAG systems by chunking documents, generating embeddings, configuring vector stores.',
+	},
+	'fine-tuning-expert': {
+		domain: 'ml',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'fine-tuning-expert',
+		description: 'Use when fine-tuning LLMs, training custom models, or adapting foundation models for specific tasks.',
+	},
+	'pandas-pro': {
+		domain: 'ml',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'pandas-pro',
+		description: 'Performs pandas DataFrame operations for data analysis, manipulation, and transformation.',
+	},
+	'spark-engineer': {
+		domain: 'ml',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'spark-engineer',
+		description: 'Use when writing Spark jobs, debugging performance issues, or configuring cluster settings for Apache Spark applications.',
+	},
+	'devops-engineer': {
+		domain: 'devops',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'devops-engineer',
+		description: 'Creates Dockerfiles, configures CI/CD pipelines, writes Kubernetes manifests, and generates Terraform/Pulumi infrastructure templates.',
+	},
+	'kubernetes-specialist': {
+		domain: 'devops',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'kubernetes-specialist',
+		description: 'Use when deploying or managing Kubernetes workloads: deployment manifests, pod security policies, service configuration.',
+	},
+	'terraform-engineer': {
+		domain: 'devops',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'terraform-engineer',
+		description: 'Use when implementing infrastructure as code with Terraform across AWS, Azure, or GCP.',
+	},
+	'cloud-architect': {
+		domain: 'devops',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'cloud-architect',
+		description: 'Designs cloud architectures, creates migration plans, generates cost optimization recommendations, and produces disaster recovery strategies.',
+	},
+	'code-reviewer': {
+		domain: 'general',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'code-reviewer',
+		description: 'Analyzes code diffs and files to identify bugs, security vulnerabilities, code smells, and N+1 query patterns.',
+	},
+	'debugging-wizard': {
+		domain: 'general',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'debugging-wizard',
+		description: 'Parses error messages, traces execution flow through stack traces, correlates log entries to identify failure points.',
+	},
+	'test-master': {
+		domain: 'general',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'test-master',
+		description: 'Generates test files, creates mocking strategies, analyzes code coverage, designs test architectures.',
+	},
+	'feature-forge': {
+		domain: 'planning',
+		source: 'Jeffallan/claude-skills',
+		skillName: 'feature-forge',
+		description: 'Conducts structured requirements workshops to produce feature specifications, user stories, EARS-format functional requirements.',
+	},
+};
 
 /**
- * Every skill/tool name init or sync can resolve, across all domains plus
- * external tools — used to validate --with= and suggest a fix for typos.
+ * Domain categories used to group the catalog (REMOTE_SKILLS + EXTERNAL_TOOLS)
+ * for display in `list` and the wizard. `formats` is a physical directory
+ * (skills/formats) of small behavioral variants original to this project —
+ * it stays vendored, unlike every other domain.
+ */
+export const DOMAIN_DIRS = ['frontend', 'design', 'backend', 'fullstack', 'ml', 'devops', 'general', 'planning'];
+
+/** Every REMOTE_SKILLS/EXTERNAL_TOOLS name belonging to one domain, sorted. */
+export function namesInDomain(domain) {
+	const names = [
+		...Object.entries(REMOTE_SKILLS)
+			.filter(([, entry]) => entry.domain === domain)
+			.map(([name]) => name),
+		...Object.entries(EXTERNAL_TOOLS)
+			.filter(([, tool]) => tool.domain === domain)
+			.map(([name]) => name),
+	];
+	return names.sort();
+}
+
+/**
+ * Every skill/tool name init or sync can resolve — this package's own
+ * vendored core/formats skills, the remote-skill catalog, and external tools
+ * — used to validate --with= and suggest a fix for typos.
  */
 export async function listKnownNames() {
 	const names = [];
-	for (const kind of DOMAIN_DIRS) {
+	for (const kind of ['core', 'formats']) {
 		const dir = path.join(SKILLS_DIR, kind);
 		if (!existsSync(dir)) continue;
 		for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
 			if (entry.isDirectory()) names.push(entry.name);
 		}
 	}
+	names.push(...Object.keys(REMOTE_SKILLS));
 	names.push(...Object.keys(EXTERNAL_TOOLS));
 	return names;
 }
@@ -300,17 +477,6 @@ export async function copySkill(kind, name, destDir) {
 	if (!existsSync(path.join(src, 'SKILL.md'))) return false;
 	await fs.cp(src, path.join(destDir, name), { recursive: true });
 	return true;
-}
-
-/**
- * A domain skill (as opposed to a core skill or an external tool) can live
- * under any of DOMAIN_DIRS — find and copy it from whichever one has it.
- */
-export async function copyDomainSkill(name, destDir) {
-	for (const kind of DOMAIN_DIRS) {
-		if (await copySkill(kind, name, destDir)) return true;
-	}
-	return false;
 }
 
 /**

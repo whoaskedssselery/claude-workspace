@@ -14,7 +14,9 @@ import {
 	extractDescription,
 	truncate,
 	copySkill,
-	copyDomainSkill,
+	REMOTE_SKILLS,
+	EXTERNAL_TOOLS,
+	namesInDomain,
 	loadPreset,
 	projectPresetsDir,
 	ensureGitignore,
@@ -143,7 +145,7 @@ describe('truncate', () => {
 	});
 });
 
-describe('copySkill / copyDomainSkill', () => {
+describe('copySkill', () => {
 	let dest;
 	before(() => {
 		dest = tmpDir();
@@ -163,15 +165,43 @@ describe('copySkill / copyDomainSkill', () => {
 		assert.equal(ok, false);
 	});
 
-	test('copyDomainSkill finds a skill across domain folders', async () => {
-		const ok = await copyDomainSkill('react-best-practices', dest);
+	test('copies a real format-variant skill directory', async () => {
+		const ok = await copySkill('formats', 'spike', dest);
 		assert.equal(ok, true);
-		assert.ok(existsSync(path.join(dest, 'react-best-practices', 'SKILL.md')));
+		assert.ok(existsSync(path.join(dest, 'spike', 'SKILL.md')));
+	});
+});
+
+// Domain skills (frontend, backend, design, ...) are no longer vendored in
+// this repo — they're fetched on demand from their author's own source repo
+// (see remote.js's fetchRemoteSkill), so there's nothing local left to copy.
+// These tests cover the catalog data that drives that fetch instead.
+describe('REMOTE_SKILLS / EXTERNAL_TOOLS / namesInDomain', () => {
+	test('every remote skill entry has a domain, a source repo and a description', () => {
+		for (const [name, entry] of Object.entries(REMOTE_SKILLS)) {
+			assert.ok(entry.domain, `${name} missing domain`);
+			assert.ok(entry.source, `${name} missing source`);
+			assert.ok(entry.skillName, `${name} missing skillName`);
+			assert.ok(entry.description, `${name} missing description`);
+		}
 	});
 
-	test('copyDomainSkill returns false for an unknown name', async () => {
-		const ok = await copyDomainSkill('not-a-real-skill', dest);
-		assert.equal(ok, false);
+	test('every external tool now carries a domain for catalog grouping', () => {
+		for (const [name, tool] of Object.entries(EXTERNAL_TOOLS)) {
+			assert.ok(tool.domain, `${name} missing domain`);
+		}
+	});
+
+	test('namesInDomain merges remote skills and external tools sharing a domain', () => {
+		const design = namesInDomain('design');
+		assert.ok(design.includes('claude-design'));
+		assert.ok(design.includes('taste'));
+		assert.ok(design.includes('ui-ux-pro-max'));
+		assert.ok(design.includes('impeccable'));
+	});
+
+	test('namesInDomain returns an empty array for an unknown domain', () => {
+		assert.deepEqual(namesInDomain('not-a-real-domain'), []);
 	});
 });
 
@@ -516,11 +546,11 @@ describe('init', () => {
 		}
 	});
 
-	test('--with= pulls in a domain skill not listed by the preset', async () => {
+	test('--with= pulls in a format variant not listed by the preset', async () => {
 		const dir = tmpDir();
 		try {
-			await init('learning', dir, { withNames: ['react-best-practices'] });
-			assert.ok(existsSync(path.join(dir, '.claude', 'skills', 'react-best-practices', 'SKILL.md')));
+			await init('project', dir, { withNames: ['spike'] });
+			assert.ok(existsSync(path.join(dir, '.claude', 'skills', 'spike', 'SKILL.md')));
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
@@ -547,12 +577,12 @@ describe('sync', () => {
 			// Simulate a project that has since declared an extra skill by hand.
 			const workspacePath = path.join(dir, '.claude', 'workspace.yaml');
 			let workspaceYaml = await fs.readFile(workspacePath, 'utf8');
-			workspaceYaml = workspaceYaml.replace('skills:\n  []', 'skills:\n  - api-designer');
+			workspaceYaml = workspaceYaml.replace('skills:\n  []', 'skills:\n  - spike');
 			await fs.writeFile(workspacePath, workspaceYaml, 'utf8');
 
 			await sync(dir);
 
-			assert.ok(existsSync(path.join(dir, '.claude', 'skills', 'api-designer', 'SKILL.md')));
+			assert.ok(existsSync(path.join(dir, '.claude', 'skills', 'spike', 'SKILL.md')));
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
