@@ -125,6 +125,8 @@ claude-workspace doctor            # is everything installed and up to date?
 claude-workspace add <name...>     # add skills/tools to what's already installed
 claude-workspace remove <name...>  # remove skills/tools
 claude-workspace sync              # re-copy skill content after a package update
+claude-workspace hide              # temporarily remove everything claude-workspace added
+claude-workspace unhide            # bring it all back exactly as it was
 claude-workspace update            # update the package itself, then sync
 ```
 
@@ -141,6 +143,24 @@ those with their own CLI).
 (`<!-- claude-workspace:start/end -->`) — `sync` only refreshes what's inside the markers, so
 anything you write outside them is never touched.
 
+### Temporarily hiding a workspace
+
+```bash
+claude-workspace hide     # stash .claude/skills/, workspace.yaml and the CLAUDE.md block
+claude-workspace unhide   # bring it all back exactly as it was
+```
+
+`hide` moves everything claude-workspace put into the project — `.claude/skills/`,
+`.claude/workspace.yaml`, and the generated block in `CLAUDE.md` — into
+`.claude-workspace/hidden/`, so the project looks like it did before `init` ever ran. Useful for a
+screen-share, a clean `git diff`, or handing the project to someone who shouldn't see it, without
+losing anything. It never touches your `.gitignore`; the stash gitignores itself instead (a bare
+`*` inside `.claude-workspace/hidden/`), so it can't end up committed by accident either way.
+
+`unhide` reverses it — but it's a stash, not a sync: it restores the exact pre-hide snapshot rather
+than merging in anything that changed while hidden. Running `hide` twice without an `unhide` in
+between (or `unhide` with nothing hidden) errors instead of silently doing something unexpected.
+
 `claude-workspace version` prints the installed version and, like npm's own "a newer version is
 available" notice, checks npm's `latest` tag and tells you if there's a newer one — best-effort,
 ~2.5s timeout, never fails or hangs the command if the network isn't cooperating.
@@ -155,6 +175,8 @@ claude-workspace sync [targetDir]
 claude-workspace add <name...> [--global] [--skill=<name>]
 claude-workspace remove <name...> [--global]
 claude-workspace doctor [targetDir]
+claude-workspace hide [targetDir]
+claude-workspace unhide [targetDir]
 claude-workspace update [targetDir]
 claude-workspace version
 ```

@@ -127,6 +127,8 @@ claude-workspace doctor            # всё установлено и актуа
 claude-workspace add <name...>     # добавить скиллы/инструменты к уже установленным
 claude-workspace remove <name...>  # убрать скиллы/инструменты
 claude-workspace sync              # перекопировать содержимое скиллов после обновления пакета
+claude-workspace hide              # временно убрать всё, что добавил claude-workspace
+claude-workspace unhide            # вернуть всё обратно, как было
 claude-workspace update            # обновить сам пакет, затем sync
 ```
 
@@ -143,6 +145,24 @@ claude-workspace update            # обновить сам пакет, зат�
 (`<!-- claude-workspace:start/end -->`) — `sync` обновляет только то, что внутри меток, всё
 написанное снаружи не трогается никогда.
 
+### Временно спрятать воркспейс
+
+```bash
+claude-workspace hide     # спрятать .claude/skills/, workspace.yaml и блок в CLAUDE.md
+claude-workspace unhide   # вернуть всё обратно, точно как было
+```
+
+`hide` перемещает всё, что claude-workspace добавил в проект — `.claude/skills/`,
+`.claude/workspace.yaml` и сгенерированный блок в `CLAUDE.md` — в `.claude-workspace/hidden/`, так
+что проект выглядит так, будто `init` никогда не запускался. Полезно для скриншеринга, чистого
+`git diff` или передачи проекта тому, кто не должен это видеть, — при этом ничего не теряется.
+Твой `.gitignore` при этом не трогается вообще: тайник игнорирует сам себя (голая `*` внутри
+`.claude-workspace/hidden/`), так что случайно закоммитить его не получится в любом случае.
+
+`unhide` — это разворот, но не sync: он восстанавливает точный снимок состояния до `hide`, а не
+сливает то, что изменилось, пока было спрятано. Повторный `hide` без `unhide` между ними (или
+`unhide`, когда прятать нечего) завершится ошибкой, а не тихо сделает что-то неожиданное.
+
 `claude-workspace version` печатает установленную версию и, как у npm, проверяет тег `latest` на
 npm — если есть версия новее, скажет об этом. Best-effort: таймаут ~2.5с, никогда не роняет и не
 подвешивает команду, если с сетью что-то не так.
@@ -157,6 +177,8 @@ claude-workspace sync [targetDir]
 claude-workspace add <name...> [--global] [--skill=<name>]
 claude-workspace remove <name...> [--global]
 claude-workspace doctor [targetDir]
+claude-workspace hide [targetDir]
+claude-workspace unhide [targetDir]
 claude-workspace update [targetDir]
 claude-workspace version
 ```

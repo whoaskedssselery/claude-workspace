@@ -16,7 +16,7 @@ import path from 'node:path';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { init, sync, list, doctor, addSkills, removeSkills, updatePackage } from './lib/commands.js';
+import { init, sync, list, doctor, hide, unhide, addSkills, removeSkills, updatePackage } from './lib/commands.js';
 import { packageVersion, fetchLatestVersion } from './lib/catalog.js';
 
 const COMING_SOON = new Set([]);
@@ -33,6 +33,8 @@ Usage:
   claude-workspace add <name...> [--global]       (current directory unless --global)
   claude-workspace remove <name...> [--global]    (current directory unless --global)
   claude-workspace doctor [targetDir]
+  claude-workspace hide [targetDir]
+  claude-workspace unhide [targetDir]
   claude-workspace update [targetDir]
   claude-workspace version
 
@@ -111,6 +113,16 @@ Commands:
                   version (or has drifted — run sync), whether the recorded
                   toolkit version matches what's running, and whether
                   CLAUDE.md / the .gitignore block are in place.
+
+  hide            Temporarily moves everything claude-workspace put into the
+                  project — .claude/skills/, .claude/workspace.yaml, the
+                  generated CLAUDE.md block — into .claude-workspace/hidden/,
+                  so the project looks like it did before "init" ever ran.
+                  Doesn't touch .gitignore; the stash gitignores itself.
+
+  unhide          Reverses "hide": restores the exact pre-hide snapshot and
+                  removes the stash. Not a merge — whatever changed while
+                  hidden to the hidden files themselves is discarded.
 
   update          Best-effort "npm install -g claude-workspace@latest",
                   then "sync". Safe under npx/pnpm dlx (detected and
@@ -233,6 +245,16 @@ async function main() {
 		return;
 	}
 
+	if (command === 'hide') {
+		await hide(targetDirFrom(args));
+		return;
+	}
+
+	if (command === 'unhide') {
+		await unhide(targetDirFrom(args));
+		return;
+	}
+
 	if (command === 'update') {
 		await updatePackage(targetDirFrom(args));
 		return;
@@ -313,6 +335,9 @@ export {
 	encodeRemoteList,
 	decodeRemoteList,
 	checkSkillStatus,
+	hiddenDir,
+	hideWorkspace,
+	unhideWorkspace,
 	GITIGNORE_MARKER_START,
 	GITIGNORE_MARKER_END,
 } from './lib/manifest.js';
@@ -329,4 +354,4 @@ export {
 
 export { detectPackageManager, isEphemeralRun } from './lib/pm.js';
 
-export { init, installPreset, sync, list, doctor, addSkills, removeSkills, updatePackage } from './lib/commands.js';
+export { init, installPreset, sync, list, doctor, hide, unhide, addSkills, removeSkills, updatePackage } from './lib/commands.js';

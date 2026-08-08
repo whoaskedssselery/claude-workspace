@@ -119,6 +119,88 @@ export async function writeClaudeMd(targetDir, presetName, core, skills, { force
 	return 'appended';
 }
 
+/** Where `hide` stashes a project's claude-workspace state — .claude-workspace/hidden/. */
+export function hiddenDir(targetDir) {
+	return path.join(targetDir, '.claude-workspace', 'hidden');
+}
+
+/**
+ * Temporarily moves everything claude-workspace put into a project —
+ * .claude/skills/, .claude/workspace.yaml, and the generated block in
+ * CLAUDE.md — out of the way into .claude-workspace/hidden/, so the project
+ * looks exactly like it did before `init` ever ran. Never touches the
+ * project's own .gitignore; the stash gitignores itself instead (a bare `*`
+ * inside .claude-workspace/hidden/), so it can never end up committed by
+ * accident regardless of whether the root .gitignore block exists.
+ *
+ * This is a stash, not a sync: `unhideWorkspace` restores the pre-hide
+ * snapshot byte-for-byte rather than trying to merge in whatever changed
+ * while hidden.
+ */
+export async function hideWorkspace(targetDir) {
+	const hidden = hiddenDir(targetDir);
+	if (existsSync(hidden)) {
+		throw new Error(`Already hidden — run "claude-workspace unhide" before hiding again.`);
+	}
+	const claudeDir = path.join(targetDir, '.claude');
+	const workspacePath = path.join(claudeDir, 'workspace.yaml');
+	if (!existsSync(workspacePath)) {
+		throw new Error(`No .claude/workspace.yaml found in ${targetDir} — nothing to hide.`);
+	}
+
+	await fs.mkdir(hidden, { recursive: true });
+	await fs.writeFile(path.join(hidden, '.gitignore'), '*\n', 'utf8');
+
+	const skillsDir = path.join(claudeDir, 'skills');
+	const hadSkills = existsSync(skillsDir);
+	if (hadSkills) await fs.rename(skillsDir, path.join(hidden, 'skills'));
+	await fs.rename(workspacePath, path.join(hidden, 'workspace.yaml'));
+
+	const claudeMdPath = path.join(targetDir, 'CLAUDE.md');
+	let claudeMdTouched = false;
+	if (existsSync(claudeMdPath)) {
+		const content = await fs.readFile(claudeMdPath, 'utf8');
+		await fs.writeFile(path.join(hidden, 'CLAUDE.md.snapshot'), content, 'utf8');
+
+		const start = content.indexOf(CLAUDE_MD_MARKER_START);
+		const end = content.indexOf(CLAUDE_MD_MARKER_END);
+		if (start !== -1 && end !== -1 && end > start) {
+			const after = content.slice(end + CLAUDE_MD_MARKER_END.length).replace(/^\n/, '');
+			const stripped = (content.slice(0, start) + after).trim();
+			if (stripped) await fs.writeFile(claudeMdPath, stripped + '\n', 'utf8');
+			else await fs.rm(claudeMdPath);
+			claudeMdTouched = true;
+		}
+	}
+
+	return { hiddenDir: hidden, hadSkills, claudeMdTouched };
+}
+
+/** Reverses hideWorkspace — restores the exact pre-hide snapshot and removes the stash. */
+export async function unhideWorkspace(targetDir) {
+	const hidden = hiddenDir(targetDir);
+	if (!existsSync(hidden)) {
+		throw new Error(`Nothing hidden in ${targetDir} — run "claude-workspace hide" first.`);
+	}
+
+	const claudeDir = path.join(targetDir, '.claude');
+	await fs.mkdir(claudeDir, { recursive: true });
+
+	const hiddenSkills = path.join(hidden, 'skills');
+	const restoredSkills = existsSync(hiddenSkills);
+	if (restoredSkills) await fs.rename(hiddenSkills, path.join(claudeDir, 'skills'));
+
+	const hiddenWorkspace = path.join(hidden, 'workspace.yaml');
+	if (existsSync(hiddenWorkspace)) await fs.rename(hiddenWorkspace, path.join(claudeDir, 'workspace.yaml'));
+
+	const snapshotPath = path.join(hidden, 'CLAUDE.md.snapshot');
+	const restoredClaudeMd = existsSync(snapshotPath);
+	if (restoredClaudeMd) await fs.copyFile(snapshotPath, path.join(targetDir, 'CLAUDE.md'));
+
+	await fs.rm(hidden, { recursive: true, force: true });
+	return { restoredSkills, restoredClaudeMd };
+}
+
 /**
  * Compares an installed skill's SKILL.md against the version currently in
  * this package. Only meaningful for `kind`s this package actually vendors

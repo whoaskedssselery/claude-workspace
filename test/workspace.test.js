@@ -30,6 +30,9 @@ import {
 	fetchLatestVersion,
 	sync,
 	doctor,
+	hide,
+	unhide,
+	hiddenDir,
 	detectPackageManager,
 	isEphemeralRun,
 	isSafeName,
@@ -625,6 +628,94 @@ describe('addSkills', () => {
 			assert.equal(workspaceYaml.match(/writing-plans=/g)?.length, 1, 'not duplicated');
 		} finally {
 			console.warn = originalWarn;
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe('hide / unhide', () => {
+	test('hide moves .claude/skills, workspace.yaml and the CLAUDE.md block into the stash', async () => {
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			await hide(dir);
+
+			assert.equal(existsSync(path.join(dir, '.claude', 'skills')), false);
+			assert.equal(existsSync(path.join(dir, '.claude', 'workspace.yaml')), false);
+			assert.equal(existsSync(path.join(dir, '.claude-workspace', 'hidden', 'skills', 'commit-discipline')), true);
+			assert.equal(existsSync(path.join(dir, '.claude-workspace', 'hidden', 'workspace.yaml')), true);
+
+			const claudeMd = await fs.readFile(path.join(dir, 'CLAUDE.md'), 'utf8');
+			assert.doesNotMatch(claudeMd, /claude-workspace:start/);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('unhide restores everything exactly as it was before hide', async () => {
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			const workspaceYamlBefore = await fs.readFile(path.join(dir, '.claude', 'workspace.yaml'), 'utf8');
+			const claudeMdBefore = await fs.readFile(path.join(dir, 'CLAUDE.md'), 'utf8');
+
+			await hide(dir);
+			await unhide(dir);
+
+			assert.equal(existsSync(hiddenDir(dir)), false);
+			assert.ok(existsSync(path.join(dir, '.claude', 'skills', 'commit-discipline', 'SKILL.md')));
+			const workspaceYamlAfter = await fs.readFile(path.join(dir, '.claude', 'workspace.yaml'), 'utf8');
+			const claudeMdAfter = await fs.readFile(path.join(dir, 'CLAUDE.md'), 'utf8');
+			assert.equal(workspaceYamlAfter, workspaceYamlBefore);
+			assert.equal(claudeMdAfter, claudeMdBefore);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('the stash gitignores itself, without touching the project .gitignore', async () => {
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			const gitignoreBefore = await fs.readFile(path.join(dir, '.gitignore'), 'utf8');
+
+			await hide(dir);
+
+			const gitignoreAfter = await fs.readFile(path.join(dir, '.gitignore'), 'utf8');
+			assert.equal(gitignoreAfter, gitignoreBefore);
+			const stashGitignore = await fs.readFile(path.join(hiddenDir(dir), '.gitignore'), 'utf8');
+			assert.equal(stashGitignore.trim(), '*');
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('hide throws when there is nothing to hide', async () => {
+		const dir = tmpDir();
+		try {
+			await assert.rejects(() => hide(dir), /nothing to hide/);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('hide throws when already hidden', async () => {
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			await hide(dir);
+			await assert.rejects(() => hide(dir), /Already hidden/);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('unhide throws when nothing is hidden', async () => {
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			await assert.rejects(() => unhide(dir), /Nothing hidden/);
+		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
 	});

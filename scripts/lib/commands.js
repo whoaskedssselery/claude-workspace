@@ -41,6 +41,8 @@ import {
 	writeClaudeMd,
 	decodeRemoteList,
 	checkSkillStatus,
+	hideWorkspace,
+	unhideWorkspace,
 	GITIGNORE_MARKER_START,
 } from './manifest.js';
 import {
@@ -320,6 +322,29 @@ export async function doctor(targetDir) {
 	console.log(`  .gitignore block   ${gitignoreOk ? 'present' : 'MISSING — run sync'}`);
 
 	console.log('\nRun "claude-workspace sync" to refresh anything marked outdated or missing.\n');
+}
+
+/**
+ * Temporarily removes everything claude-workspace put into the project —
+ * .claude/skills/, .claude/workspace.yaml, the generated CLAUDE.md block —
+ * stashing it in .claude-workspace/hidden/ so "unhide" can put it back
+ * exactly as it was. Useful for a screen-share, a clean diff, or handing the
+ * project to someone who shouldn't see it, without losing anything.
+ */
+export async function hide(targetDir) {
+	const { hiddenDir: dir, hadSkills, claudeMdTouched } = await hideWorkspace(targetDir);
+	console.log(`\nHidden.`);
+	console.log(`  .claude/skills/         ${hadSkills ? 'moved' : '(was already empty)'}`);
+	console.log(`  .claude/workspace.yaml  moved`);
+	console.log(`  CLAUDE.md               ${claudeMdTouched ? 'generated block removed' : 'unchanged'}`);
+	console.log(`  stashed in ${dir}`);
+	console.log(`\nRun "claude-workspace unhide" to bring it all back exactly as it was.\n`);
+}
+
+/** Reverses "hide" — see hideWorkspace/unhideWorkspace in manifest.js. */
+export async function unhide(targetDir) {
+	await unhideWorkspace(targetDir);
+	console.log(`\nRestored. .claude/skills/, .claude/workspace.yaml and CLAUDE.md are back exactly as they were before "hide".\n`);
 }
 
 /**
