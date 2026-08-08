@@ -116,9 +116,11 @@ Commands:
 
   hide            Temporarily moves everything claude-workspace put into the
                   project — .claude/skills/, .claude/workspace.yaml, the
-                  generated CLAUDE.md block — into .claude-workspace/hidden/,
-                  so the project looks like it did before "init" ever ran.
-                  Doesn't touch .gitignore; the stash gitignores itself.
+                  generated CLAUDE.md block, known external tool folders —
+                  into a stash OUTSIDE the project (~/.claude-workspace/
+                  hidden/), so nothing is left in the project tree and it
+                  looks like it did before "init" ever ran. Doesn't touch
+                  .gitignore.
 
   unhide          Reverses "hide": restores the exact pre-hide snapshot and
                   removes the stash. Not a merge — whatever changed while

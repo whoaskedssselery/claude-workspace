@@ -326,25 +326,29 @@ export async function doctor(targetDir) {
 
 /**
  * Temporarily removes everything claude-workspace put into the project —
- * .claude/skills/, .claude/workspace.yaml, the generated CLAUDE.md block —
- * stashing it in .claude-workspace/hidden/ so "unhide" can put it back
- * exactly as it was. Useful for a screen-share, a clean diff, or handing the
- * project to someone who shouldn't see it, without losing anything.
+ * .claude/skills/, .claude/workspace.yaml, the generated CLAUDE.md block,
+ * and any known external tool folders (e.g. impeccable's .impeccable/) —
+ * stashing it OUTSIDE the project (see hiddenDir in manifest.js) so nothing
+ * claude-workspace-related is left sitting in the project tree, and
+ * "unhide" can put it all back exactly as it was. Useful for a
+ * screen-share, a clean diff, or handing the project to someone who
+ * shouldn't see it, without losing anything.
  */
 export async function hide(targetDir) {
-	const { hiddenDir: dir, hadSkills, claudeMdTouched } = await hideWorkspace(targetDir);
+	const { hiddenDir: dir, hadSkills, claudeMdTouched, extraDirs } = await hideWorkspace(targetDir);
 	console.log(`\nHidden.`);
 	console.log(`  .claude/skills/         ${hadSkills ? 'moved' : '(was already empty)'}`);
 	console.log(`  .claude/workspace.yaml  moved`);
 	console.log(`  CLAUDE.md               ${claudeMdTouched ? 'generated block removed' : 'unchanged'}`);
+	if (extraDirs.length) console.log(`  also moved: ${extraDirs.join(', ')}`);
 	console.log(`  stashed in ${dir}`);
 	console.log(`\nRun "claude-workspace unhide" to bring it all back exactly as it was.\n`);
 }
 
 /** Reverses "hide" — see hideWorkspace/unhideWorkspace in manifest.js. */
 export async function unhide(targetDir) {
-	await unhideWorkspace(targetDir);
-	console.log(`\nRestored. .claude/skills/, .claude/workspace.yaml and CLAUDE.md are back exactly as they were before "hide".\n`);
+	const { extraDirs } = await unhideWorkspace(targetDir);
+	console.log(`\nRestored. .claude/skills/, .claude/workspace.yaml, CLAUDE.md${extraDirs.length ? ` and ${extraDirs.join(', ')}` : ''} are back exactly as they were before "hide".\n`);
 }
 
 /**

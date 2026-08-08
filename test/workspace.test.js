@@ -5,7 +5,14 @@ import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import {
+// Must be set before workspace.js (and its static import of lib/i18n.js) is
+// ever loaded in this process, so GLOBAL_DIR — and therefore hide/unhide's
+// hiddenDir(), which now lives under it rather than inside the project —
+// points at a throwaway directory instead of the real ~/.claude-workspace.
+const fakeHome = mkdtempSync(path.join(os.tmpdir(), 'claude-workspace-test-home-'));
+process.env.CLAUDE_WORKSPACE_HOME = fakeHome;
+
+const {
 	parseSimpleYaml,
 	renderYamlList,
 	renderMarkdownList,
@@ -37,7 +44,11 @@ import {
 	isEphemeralRun,
 	isSafeName,
 	SKILLS_DIR,
-} from '../scripts/workspace.js';
+} = await import('../scripts/workspace.js');
+
+after(() => {
+	rmSync(fakeHome, { recursive: true, force: true });
+});
 
 function tmpDir() {
 	return mkdtempSync(path.join(os.tmpdir(), 'claude-workspace-test-'));
@@ -634,7 +645,7 @@ describe('addSkills', () => {
 });
 
 describe('hide / unhide', () => {
-	test('hide moves .claude/skills, workspace.yaml and the CLAUDE.md block into the stash', async () => {
+	test('hide moves .claude/skills, workspace.yaml and the CLAUDE.md block into the stash, leaving no trace in the project', async () => {
 		const dir = tmpDir();
 		try {
 			await init('oss-contribution', dir, {});
@@ -642,8 +653,12 @@ describe('hide / unhide', () => {
 
 			assert.equal(existsSync(path.join(dir, '.claude', 'skills')), false);
 			assert.equal(existsSync(path.join(dir, '.claude', 'workspace.yaml')), false);
-			assert.equal(existsSync(path.join(dir, '.claude-workspace', 'hidden', 'skills', 'commit-discipline')), true);
-			assert.equal(existsSync(path.join(dir, '.claude-workspace', 'hidden', 'workspace.yaml')), true);
+			// The stash itself must not live inside the project — an IDE's
+			// project tree (or `git status`) would still show it otherwise,
+			// .gitignore or not.
+			assert.equal(existsSync(path.join(dir, '.claude-workspace')), false);
+			assert.equal(existsSync(path.join(hiddenDir(dir), 'skills', 'commit-discipline')), true);
+			assert.equal(existsSync(path.join(hiddenDir(dir), 'workspace.yaml')), true);
 
 			const claudeMd = await fs.readFile(path.join(dir, 'CLAUDE.md'), 'utf8');
 			assert.doesNotMatch(claudeMd, /claude-workspace:start/);
@@ -673,7 +688,7 @@ describe('hide / unhide', () => {
 		}
 	});
 
-	test('the stash gitignores itself, without touching the project .gitignore', async () => {
+	test('hide never touches the project .gitignore', async () => {
 		const dir = tmpDir();
 		try {
 			await init('oss-contribution', dir, {});
@@ -683,8 +698,32 @@ describe('hide / unhide', () => {
 
 			const gitignoreAfter = await fs.readFile(path.join(dir, '.gitignore'), 'utf8');
 			assert.equal(gitignoreAfter, gitignoreBefore);
-			const stashGitignore = await fs.readFile(path.join(hiddenDir(dir), '.gitignore'), 'utf8');
-			assert.equal(stashGitignore.trim(), '*');
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('hide also sweeps up a recorded external tool\'s extra folders, and unhide puts them back', async () => {
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			// Simulate impeccable having been installed: its own installer
+			// dropped a .impeccable/ config dir, and it's recorded as an
+			// external tool in workspace.yaml.
+			await fs.mkdir(path.join(dir, '.impeccable'), { recursive: true });
+			await fs.writeFile(path.join(dir, '.impeccable', 'config.json'), '{}', 'utf8');
+			const workspacePath = path.join(dir, '.claude', 'workspace.yaml');
+			let workspaceYaml = await fs.readFile(workspacePath, 'utf8');
+			workspaceYaml = workspaceYaml.replace('external:\n  []', 'external:\n  - impeccable');
+			await fs.writeFile(workspacePath, workspaceYaml, 'utf8');
+
+			await hide(dir);
+			assert.equal(existsSync(path.join(dir, '.impeccable')), false);
+			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'impeccable__.impeccable', 'config.json')), true);
+
+			await unhide(dir);
+			assert.equal(existsSync(path.join(dir, '.impeccable', 'config.json')), true);
+			assert.equal(existsSync(hiddenDir(dir)), false);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}

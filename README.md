@@ -151,11 +151,15 @@ claude-workspace unhide   # bring it all back exactly as it was
 ```
 
 `hide` moves everything claude-workspace put into the project — `.claude/skills/`,
-`.claude/workspace.yaml`, and the generated block in `CLAUDE.md` — into
-`.claude-workspace/hidden/`, so the project looks like it did before `init` ever ran. Useful for a
-screen-share, a clean `git diff`, or handing the project to someone who shouldn't see it, without
-losing anything. It never touches your `.gitignore`; the stash gitignores itself instead (a bare
-`*` inside `.claude-workspace/hidden/`), so it can't end up committed by accident either way.
+`.claude/workspace.yaml`, the generated block in `CLAUDE.md`, and any external tool's own extra
+folders it knows about (e.g. impeccable's `.impeccable/`) — into a stash **outside the project
+entirely** (under `~/.claude-workspace/hidden/`, keyed by the project's path), so the project looks
+like it did before `init` ever ran, with nothing left in the project tree for an IDE (or `git
+status`) to show — a `.gitignore` entry only keeps a folder out of git, not out of view, which is
+why the stash doesn't live inside the project at all. Useful for a screen-share, a clean `git
+diff`, or handing the project to someone who shouldn't see it, without losing anything. Never
+touches your `.gitignore`, and works the same whether `claude-workspace` itself is installed
+globally or only in this one project.
 
 `unhide` reverses it — but it's a stash, not a sync: it restores the exact pre-hide snapshot rather
 than merging in anything that changed while hidden. Running `hide` twice without an `unhide` in

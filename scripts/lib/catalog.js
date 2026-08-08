@@ -87,12 +87,20 @@ export function fetchLatestVersion({ timeout = 2500, url = 'https://registry.npm
  * catalog listing/wizard grouping purposes only — it has no effect on how
  * the tool is actually installed (still its own steps, never a skill copy).
  */
+/**
+ * `extraDirs`: project-root folders a tool's own installer is known to
+ * create *besides* .claude/skills/ — "hide" moves these into its stash too,
+ * and "unhide" puts them back, same as everything else. Best-effort: an
+ * installer that writes somewhere undocumented/unpredictable (ui-ux-pro-max
+ * here) simply isn't listed, and hide won't know to touch it.
+ */
 export const EXTERNAL_TOOLS = {
 	impeccable: {
 		domain: 'design',
 		url: 'https://github.com/pbakaus/impeccable',
 		manualInstall: 'npx impeccable install',
 		steps: [{ command: 'npx', args: ['impeccable', 'install', '--providers=claude', '--scope=project'] }],
+		extraDirs: ['.impeccable'],
 	},
 	superpowers: {
 		domain: 'general',
@@ -103,13 +111,26 @@ export const EXTERNAL_TOOLS = {
 	taste: {
 		domain: 'design',
 		url: 'https://github.com/Leonxlnx/taste-skill',
-		manualInstall: 'npx skills add https://github.com/Leonxlnx/taste-skill --skill "design-taste-frontend"',
+		manualInstall: 'npx skills add https://github.com/Leonxlnx/taste-skill --skill "design-taste-frontend" --agent claude-code --copy',
 		steps: [
 			{
 				command: 'npx',
-				args: ['skills', 'add', 'https://github.com/Leonxlnx/taste-skill', '--skill', 'design-taste-frontend'],
+				args: [
+					'skills',
+					'add',
+					'https://github.com/Leonxlnx/taste-skill',
+					'--skill',
+					'design-taste-frontend',
+					'--agent',
+					'claude-code',
+					'--copy',
+				],
 			},
 		],
+		// Without --agent claude-code --copy above (fixed, but older installs
+		// predate the fix), the "skills" CLI defaults to its own agent-agnostic
+		// .agents/skills/ instead of .claude/skills/ — still swept up by hide.
+		extraDirs: ['.agents'],
 	},
 	'ui-ux-pro-max': {
 		domain: 'design',

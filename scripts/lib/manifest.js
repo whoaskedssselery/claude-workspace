@@ -7,9 +7,11 @@
 import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 
 import { warn } from './log.js';
-import { TEMPLATES_DIR, SKILLS_DIR, packageVersion, renderYamlList, renderMarkdownList } from './catalog.js';
+import { GLOBAL_DIR } from './i18n.js';
+import { TEMPLATES_DIR, SKILLS_DIR, EXTERNAL_TOOLS, parseSimpleYaml, packageVersion, renderYamlList, renderMarkdownList } from './catalog.js';
 
 export const GITIGNORE_MARKER_START = '# --- claude-workspace: local Claude Code state (do not remove this block) ---';
 export const GITIGNORE_MARKER_END = '# --- end claude-workspace ---';
@@ -119,19 +121,53 @@ export async function writeClaudeMd(targetDir, presetName, core, skills, { force
 	return 'appended';
 }
 
-/** Where `hide` stashes a project's claude-workspace state — .claude-workspace/hidden/. */
+/**
+ * Where `hide` stashes a project's claude-workspace state — deliberately
+ * OUTSIDE the project directory (under GLOBAL_DIR, next to presets/ and
+ * config.json — same personal, machine-wide location, overridable via
+ * CLAUDE_WORKSPACE_HOME for tests). A stash living inside the project (e.g.
+ * <project>/.claude-workspace/hidden/) is still a folder an IDE's project
+ * tree shows, `.gitignore` or not — gitignoring only keeps it out of git,
+ * not out of view. Keying it off a hash of the resolved project path keeps
+ * multiple projects' stashes apart without needing anything inside the
+ * project itself.
+ */
 export function hiddenDir(targetDir) {
-	return path.join(targetDir, '.claude-workspace', 'hidden');
+	const id = crypto.createHash('sha1').update(path.resolve(targetDir)).digest('hex').slice(0, 16);
+	return path.join(GLOBAL_DIR, 'hidden', id);
+}
+
+/**
+ * Moves an external tool's own extra project-root folders (EXTERNAL_TOOLS'
+ * `extraDirs`, e.g. impeccable's .impeccable/) into the stash, one
+ * subfolder per tool so unhide can put each back at its original path.
+ * Only tools recorded in the workspace's `external:` list are considered —
+ * an unrelated folder that happens to share a name is never touched.
+ */
+async function moveExtraDirs(targetDir, hidden, externalNames) {
+	const moved = [];
+	for (const name of externalNames) {
+		for (const rel of EXTERNAL_TOOLS[name]?.extraDirs ?? []) {
+			const src = path.join(targetDir, rel);
+			if (!existsSync(src)) continue;
+			const stashName = `${name}__${rel.replace(/[\\/]/g, '_')}`;
+			await fs.mkdir(path.join(hidden, 'extra'), { recursive: true });
+			await fs.rename(src, path.join(hidden, 'extra', stashName));
+			moved.push({ rel, stashName });
+		}
+	}
+	return moved;
 }
 
 /**
  * Temporarily moves everything claude-workspace put into a project —
- * .claude/skills/, .claude/workspace.yaml, and the generated block in
- * CLAUDE.md — out of the way into .claude-workspace/hidden/, so the project
- * looks exactly like it did before `init` ever ran. Never touches the
- * project's own .gitignore; the stash gitignores itself instead (a bare `*`
- * inside .claude-workspace/hidden/), so it can never end up committed by
- * accident regardless of whether the root .gitignore block exists.
+ * .claude/skills/, .claude/workspace.yaml, the generated block in
+ * CLAUDE.md, and any external tool's own extra folders (EXTERNAL_TOOLS'
+ * `extraDirs`, e.g. impeccable's .impeccable/) — out of the project
+ * entirely, into the stash (see hiddenDir above), so the project looks
+ * exactly like it did before `init` ever ran and nothing claude-workspace-
+ * related is left sitting in the project tree. Never touches the project's
+ * own .gitignore.
  *
  * This is a stash, not a sync: `unhideWorkspace` restores the pre-hide
  * snapshot byte-for-byte rather than trying to merge in whatever changed
@@ -148,8 +184,9 @@ export async function hideWorkspace(targetDir) {
 		throw new Error(`No .claude/workspace.yaml found in ${targetDir} — nothing to hide.`);
 	}
 
+	const manifest = parseSimpleYaml(await fs.readFile(workspacePath, 'utf8'));
+
 	await fs.mkdir(hidden, { recursive: true });
-	await fs.writeFile(path.join(hidden, '.gitignore'), '*\n', 'utf8');
 
 	const skillsDir = path.join(claudeDir, 'skills');
 	const hadSkills = existsSync(skillsDir);
@@ -173,7 +210,21 @@ export async function hideWorkspace(targetDir) {
 		}
 	}
 
-	return { hiddenDir: hidden, hadSkills, claudeMdTouched };
+	const extraDirs = await moveExtraDirs(targetDir, hidden, manifest.external ?? []);
+	if (extraDirs.length) {
+		await fs.writeFile(path.join(hidden, 'extra-dirs.json'), JSON.stringify(extraDirs, null, 2) + '\n', 'utf8');
+	}
+
+	// .claude/ itself is left empty by the moves above unless something
+	// genuinely personal (settings.local.json, Claude Code's own state) is
+	// still in it — remove it in that case too, so an empty husk doesn't sit
+	// in the project tree; leave it alone otherwise, since that file is
+	// deliberately not this tool's to touch (see ensureGitignore).
+	if (existsSync(claudeDir) && (await fs.readdir(claudeDir)).length === 0) {
+		await fs.rmdir(claudeDir);
+	}
+
+	return { hiddenDir: hidden, hadSkills, claudeMdTouched, extraDirs: extraDirs.map((e) => e.rel) };
 }
 
 /** Reverses hideWorkspace — restores the exact pre-hide snapshot and removes the stash. */
@@ -197,8 +248,21 @@ export async function unhideWorkspace(targetDir) {
 	const restoredClaudeMd = existsSync(snapshotPath);
 	if (restoredClaudeMd) await fs.copyFile(snapshotPath, path.join(targetDir, 'CLAUDE.md'));
 
+	const extraManifestPath = path.join(hidden, 'extra-dirs.json');
+	let extraDirs = [];
+	if (existsSync(extraManifestPath)) {
+		extraDirs = JSON.parse(await fs.readFile(extraManifestPath, 'utf8'));
+		for (const { rel, stashName } of extraDirs) {
+			const src = path.join(hidden, 'extra', stashName);
+			if (!existsSync(src)) continue;
+			const dest = path.join(targetDir, rel);
+			await fs.mkdir(path.dirname(dest), { recursive: true });
+			await fs.rename(src, dest);
+		}
+	}
+
 	await fs.rm(hidden, { recursive: true, force: true });
-	return { restoredSkills, restoredClaudeMd };
+	return { restoredSkills, restoredClaudeMd, extraDirs: extraDirs.map((e) => e.rel) };
 }
 
 /**
