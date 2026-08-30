@@ -1,6 +1,8 @@
 ---
 name: codegraph
 description: Use the CodeGraph MCP tools as the primary way to navigate and understand this codebase before writing or editing code.
+creates:
+  - .codegraph
 ---
 
 # CodeGraph

@@ -116,11 +116,22 @@ Commands:
 
   hide            Temporarily moves everything claude-workspace put into the
                   project — .claude/skills/, .claude/workspace.yaml, the
-                  generated CLAUDE.md block, known external tool folders —
-                  into a stash OUTSIDE the project (~/.claude-workspace/
-                  hidden/), so nothing is left in the project tree and it
-                  looks like it did before "init" ever ran. Doesn't touch
-                  .gitignore.
+                  generated CLAUDE.md block, each currently-installed
+                  skill/tool's own declared extra paths (see "creates:" in
+                  catalog.js / a skill's own SKILL.md frontmatter), and
+                  anything listed in .claude-workspace/hide.yaml — into a
+                  stash OUTSIDE the project (~/.claude-workspace/hidden/),
+                  so nothing is left in the project tree and it looks like
+                  it did before "init" ever ran. Doesn't touch .gitignore.
+
+                  .claude-workspace/hide.yaml lets you list extra files or
+                  folders (relative to the project root) to sweep up too —
+                  anything hide has no other way to know about, e.g.:
+                    paths:
+                      - .env.local
+                      - notes/
+                  Optional; committed like a custom preset, so the whole
+                  team gets the same hide behavior after a clone.
 
   unhide          Reverses "hide": restores the exact pre-hide snapshot and
                   removes the stash. Not a merge — whatever changed while
@@ -311,11 +322,14 @@ export {
 	suggestName,
 	isSafeName,
 	extractDescription,
+	extractCreates,
+	resolveCreatedPaths,
 	truncate,
 	copySkill,
 	loadPreset,
 	listPresetNames,
 	projectPresetsDir,
+	projectHideConfigPath,
 	describeSkill,
 	listKnownNames,
 	packageVersion,
@@ -340,6 +354,7 @@ export {
 	hiddenDir,
 	hideWorkspace,
 	unhideWorkspace,
+	readHideConfig,
 	GITIGNORE_MARKER_START,
 	GITIGNORE_MARKER_END,
 } from './lib/manifest.js';

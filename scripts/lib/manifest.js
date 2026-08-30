@@ -11,7 +11,16 @@ import crypto from 'node:crypto';
 
 import { warn } from './log.js';
 import { GLOBAL_DIR } from './i18n.js';
-import { TEMPLATES_DIR, SKILLS_DIR, KNOWN_EXTRA_DIRS, packageVersion, renderYamlList, renderMarkdownList } from './catalog.js';
+import {
+	TEMPLATES_DIR,
+	SKILLS_DIR,
+	resolveCreatedPaths,
+	parseSimpleYaml,
+	packageVersion,
+	renderYamlList,
+	renderMarkdownList,
+	projectHideConfigPath,
+} from './catalog.js';
 
 export const GITIGNORE_MARKER_START = '# --- claude-workspace: local Claude Code state (do not remove this block) ---';
 export const GITIGNORE_MARKER_END = '# --- end claude-workspace ---';
@@ -138,16 +147,28 @@ export function hiddenDir(targetDir) {
 }
 
 /**
- * Moves every folder in KNOWN_EXTRA_DIRS that actually exists at the
- * project root into the stash, one subfolder per entry so unhide can put
- * each back at its original path. Checked unconditionally — not gated on
- * what workspace.yaml happens to have recorded — since a tool like
- * codegraph is never "installed" through claude-workspace's own tracking
- * in the first place (see KNOWN_EXTRA_DIRS in catalog.js).
+ * Moves every project-root path a name currently recorded in this
+ * project's workspace.yaml is known to create (see resolveCreatedPaths in
+ * catalog.js), plus whatever the project's own hide.yaml lists (see
+ * readHideConfig below), into the stash, one subfolder per path so unhide
+ * can put each back at its original location. The workspace.yaml half is
+ * scoped to what THIS project actually has installed — not a fixed list
+ * checked in every project regardless of relevance — because that's what
+ * "hide" should be reversing: what claude-workspace itself put here, not
+ * anything with a familiar-looking name that happens to exist. A tool
+ * installed by hand, bypassing claude-workspace entirely, is out of scope
+ * by that logic — nothing recorded it — which is exactly what hide.yaml is
+ * for: an explicit, user-declared exception to "only what we recognize".
  */
-async function moveExtraDirs(targetDir, hidden) {
+async function moveExtraDirs(targetDir, hidden, installedNames, customPaths) {
+	const entries = [];
+	for (const name of installedNames) {
+		for (const rel of await resolveCreatedPaths(name)) entries.push({ name, rel });
+	}
+	for (const rel of customPaths) entries.push({ name: 'custom', rel });
+
 	const moved = [];
-	for (const [rel, name] of Object.entries(KNOWN_EXTRA_DIRS)) {
+	for (const { name, rel } of entries) {
 		const src = path.join(targetDir, rel);
 		if (!existsSync(src)) continue;
 		const stashName = `${name}__${rel.replace(/[\\/]/g, '_')}`;
@@ -159,14 +180,39 @@ async function moveExtraDirs(targetDir, hidden) {
 }
 
 /**
+ * Extra paths (relative to the project root) hide.yaml asks "hide" to sweep
+ * up, on top of whatever it already infers from workspace.yaml. Missing
+ * file or an empty/absent `paths:` list is fine — hide just has nothing
+ * extra to do. Each entry is checked to resolve inside targetDir, so a
+ * ".." or absolute entry can't move something from outside the project
+ * into the stash — it's skipped with a warning instead.
+ */
+export async function readHideConfig(targetDir) {
+	const file = projectHideConfigPath(targetDir);
+	if (!existsSync(file)) return [];
+
+	const root = path.resolve(targetDir);
+	const paths = parseSimpleYaml(await fs.readFile(file, 'utf8')).paths ?? [];
+	return paths.filter((rel) => {
+		const resolved = path.resolve(root, rel);
+		const safe = !path.isAbsolute(rel) && (resolved === root || resolved.startsWith(root + path.sep));
+		if (!safe) warn(`.claude-workspace/hide.yaml: ignoring "${rel}" — not a path inside the project.`);
+		return safe;
+	});
+}
+
+/**
  * Temporarily moves everything claude-workspace put into a project —
  * .claude/skills/, .claude/workspace.yaml, the generated block in
- * CLAUDE.md, and any known companion tool's own folder (KNOWN_EXTRA_DIRS
- * in catalog.js — impeccable's .impeccable/, codegraph's .codegraph/, ...)
- * — out of the project entirely, into the stash (see hiddenDir above), so
- * the project looks exactly like it did before `init` ever ran and nothing
- * claude-workspace-related is left sitting in the project tree. Never
- * touches the project's own .gitignore.
+ * CLAUDE.md, every currently-installed name's own known extra paths
+ * (resolveCreatedPaths in catalog.js — impeccable's .impeccable/,
+ * codegraph's .codegraph/, claude-design's product-facts.md, ...), and
+ * whatever the project's own .claude-workspace/hide.yaml lists (see
+ * readHideConfig above) — out of the project entirely, into the stash (see
+ * hiddenDir above), so the project looks exactly like it did before `init`
+ * ever ran and nothing claude-workspace-related, or explicitly listed to
+ * hide, is left sitting in the project tree. Never touches the project's
+ * own .gitignore.
  *
  * This is a stash, not a sync: `unhideWorkspace` restores the pre-hide
  * snapshot byte-for-byte rather than trying to merge in whatever changed
@@ -182,6 +228,14 @@ export async function hideWorkspace(targetDir) {
 	if (!existsSync(workspacePath)) {
 		throw new Error(`No .claude/workspace.yaml found in ${targetDir} — nothing to hide.`);
 	}
+
+	const manifest = parseSimpleYaml(await fs.readFile(workspacePath, 'utf8'));
+	const installedNames = [
+		...(manifest.core ?? []),
+		...(manifest.skills ?? []),
+		...(manifest.external ?? []),
+		...decodeRemoteList(manifest.remote).map((r) => r.name),
+	];
 
 	await fs.mkdir(hidden, { recursive: true });
 
@@ -207,7 +261,8 @@ export async function hideWorkspace(targetDir) {
 		}
 	}
 
-	const extraDirs = await moveExtraDirs(targetDir, hidden);
+	const customPaths = await readHideConfig(targetDir);
+	const extraDirs = await moveExtraDirs(targetDir, hidden, installedNames, customPaths);
 	if (extraDirs.length) {
 		await fs.writeFile(path.join(hidden, 'extra-dirs.json'), JSON.stringify(extraDirs, null, 2) + '\n', 'utf8');
 	}

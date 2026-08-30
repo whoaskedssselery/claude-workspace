@@ -19,6 +19,8 @@ const {
 	editDistance,
 	suggestName,
 	extractDescription,
+	extractCreates,
+	resolveCreatedPaths,
 	truncate,
 	copySkill,
 	REMOTE_SKILLS,
@@ -40,6 +42,8 @@ const {
 	hide,
 	unhide,
 	hiddenDir,
+	projectHideConfigPath,
+	readHideConfig,
 	detectPackageManager,
 	isEphemeralRun,
 	isSafeName,
@@ -143,6 +147,44 @@ describe('extractDescription', () => {
 
 	test('returns empty string when there is no frontmatter', () => {
 		assert.equal(extractDescription('# Just a heading\n'), '');
+	});
+});
+
+describe('extractCreates', () => {
+	test('reads a creates: list from frontmatter', () => {
+		const md = `---\nname: foo\ndescription: bar\ncreates:\n  - .foo\n  - some/nested/dir\n---\n\n# Foo\n`;
+		assert.deepEqual(extractCreates(md), ['.foo', 'some/nested/dir']);
+	});
+
+	test('returns an empty array when there is no creates: key', () => {
+		const md = `---\nname: foo\ndescription: bar\n---\n\n# Foo\n`;
+		assert.deepEqual(extractCreates(md), []);
+	});
+
+	test('returns an empty array when there is no frontmatter', () => {
+		assert.deepEqual(extractCreates('# Just a heading\n'), []);
+	});
+});
+
+describe('resolveCreatedPaths', () => {
+	test('reads an external tool\'s own creates list', async () => {
+		assert.deepEqual(await resolveCreatedPaths('impeccable'), ['.impeccable']);
+	});
+
+	test('reads a REMOTE_SKILLS catalog entry\'s own creates list', async () => {
+		assert.deepEqual(await resolveCreatedPaths('feature-forge'), ['specs']);
+	});
+
+	test('reads a vendored core skill\'s own frontmatter creates list', async () => {
+		assert.deepEqual(await resolveCreatedPaths('codegraph'), ['.codegraph']);
+	});
+
+	test('returns an empty array for a name with nothing declared', async () => {
+		assert.deepEqual(await resolveCreatedPaths('commit-discipline'), []);
+	});
+
+	test('returns an empty array for an unknown name', async () => {
+		assert.deepEqual(await resolveCreatedPaths('not-a-real-name'), []);
 	});
 });
 
@@ -703,31 +745,119 @@ describe('hide / unhide', () => {
 		}
 	});
 
-	test('hide sweeps up known companion-tool folders even when workspace.yaml never recorded them, and unhide puts them back', async () => {
+	test('hide sweeps up a currently-installed name\'s own extra paths (codegraph is core, so no recording needed), and unhide puts them back', async () => {
 		const dir = tmpDir();
 		try {
+			// codegraph is part of oss-contribution's core: list already —
+			// its .codegraph/ folder (declared in its own SKILL.md frontmatter)
+			// is swept without anything extra being recorded.
 			await init('oss-contribution', dir, {});
-			// impeccable and codegraph are both installed outside
-			// claude-workspace's own tracking — impeccable via its installer's
-			// steps (never recorded as "external" if run by hand), codegraph
-			// via its own separate CLI per the codegraph skill's instructions
-			// (never recorded at all). Neither shows up in workspace.yaml, so
-			// this simulates them existing with nothing else changed.
-			await fs.mkdir(path.join(dir, '.impeccable'), { recursive: true });
-			await fs.writeFile(path.join(dir, '.impeccable', 'config.json'), '{}', 'utf8');
 			await fs.mkdir(path.join(dir, '.codegraph'), { recursive: true });
 			await fs.writeFile(path.join(dir, '.codegraph', 'index.db'), 'fake-index', 'utf8');
 
 			await hide(dir);
-			assert.equal(existsSync(path.join(dir, '.impeccable')), false);
 			assert.equal(existsSync(path.join(dir, '.codegraph')), false);
-			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'impeccable__.impeccable', 'config.json')), true);
 			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'codegraph__.codegraph', 'index.db')), true);
 
 			await unhide(dir);
-			assert.equal(existsSync(path.join(dir, '.impeccable', 'config.json')), true);
 			assert.equal(existsSync(path.join(dir, '.codegraph', 'index.db')), true);
 			assert.equal(existsSync(hiddenDir(dir)), false);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('hide sweeps a recorded external tool\'s extra folder too, resolved from its catalog entry', async () => {
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			await fs.mkdir(path.join(dir, '.impeccable'), { recursive: true });
+			await fs.writeFile(path.join(dir, '.impeccable', 'config.json'), '{}', 'utf8');
+			const workspacePath = path.join(dir, '.claude', 'workspace.yaml');
+			let workspaceYaml = await fs.readFile(workspacePath, 'utf8');
+			workspaceYaml = workspaceYaml.replace('external:\n  []', 'external:\n  - impeccable');
+			await fs.writeFile(workspacePath, workspaceYaml, 'utf8');
+
+			await hide(dir);
+			assert.equal(existsSync(path.join(dir, '.impeccable')), false);
+			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'impeccable__.impeccable', 'config.json')), true);
+
+			await unhide(dir);
+			assert.equal(existsSync(path.join(dir, '.impeccable', 'config.json')), true);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('hide leaves a folder alone when nothing in workspace.yaml is recorded as creating it', async () => {
+		// Scoped to what claude-workspace itself installed: a tool set up by
+		// hand, bypassing claude-workspace entirely, is out of scope by design
+		// — nothing recorded it, so hide has no name to look its paths up under.
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			await fs.mkdir(path.join(dir, '.impeccable'), { recursive: true });
+
+			await hide(dir);
+			assert.equal(existsSync(path.join(dir, '.impeccable')), true);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('hide sweeps up paths listed in .claude-workspace/hide.yaml even though nothing recorded them, and unhide puts them back', async () => {
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			await fs.mkdir(path.join(dir, 'notes'), { recursive: true });
+			await fs.writeFile(path.join(dir, 'notes', 'secret.md'), 'shh', 'utf8');
+			await fs.writeFile(path.join(dir, '.env.local'), 'SECRET=1', 'utf8');
+			await fs.mkdir(path.join(dir, '.claude-workspace'), { recursive: true });
+			await fs.writeFile(
+				projectHideConfigPath(dir),
+				'paths:\n  - notes\n  - .env.local\n',
+				'utf8'
+			);
+
+			await hide(dir);
+			assert.equal(existsSync(path.join(dir, 'notes')), false);
+			assert.equal(existsSync(path.join(dir, '.env.local')), false);
+			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'custom__notes', 'secret.md')), true);
+			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'custom__.env.local')), true);
+
+			await unhide(dir);
+			assert.equal(existsSync(path.join(dir, 'notes', 'secret.md')), true);
+			assert.equal(existsSync(path.join(dir, '.env.local')), true);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('hide.yaml entries that try to escape the project are ignored with a warning', async () => {
+		const dir = tmpDir();
+		const originalWarn = console.warn;
+		const warnings = [];
+		console.warn = (...args) => warnings.push(args.join(' '));
+		try {
+			await init('oss-contribution', dir, {});
+			await fs.mkdir(path.join(dir, '.claude-workspace'), { recursive: true });
+			await fs.writeFile(projectHideConfigPath(dir), 'paths:\n  - ../outside\n  - /etc/passwd\n', 'utf8');
+
+			const paths = await readHideConfig(dir);
+			assert.deepEqual(paths, []);
+			assert.ok(warnings.some((w) => w.includes('../outside')));
+			assert.ok(warnings.some((w) => w.includes('/etc/passwd')));
+		} finally {
+			console.warn = originalWarn;
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('missing hide.yaml is fine — hide behaves exactly as without one', async () => {
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			assert.deepEqual(await readHideConfig(dir), []);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}

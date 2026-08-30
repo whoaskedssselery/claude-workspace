@@ -87,14 +87,14 @@ export function fetchLatestVersion({ timeout = 2500, url = 'https://registry.npm
  * catalog listing/wizard grouping purposes only — it has no effect on how
  * the tool is actually installed (still its own steps, never a skill copy).
  *
- * `extraDirs`: project-root folders a tool's own installer is known to
- * create *besides* .claude/skills/ — "hide" moves these into its stash too,
- * and "unhide" puts them back, same as everything else (see
- * KNOWN_EXTRA_DIRS below — hide checks for these unconditionally, not only
- * for tools it recorded installing itself, since e.g. codegraph is a
- * separate CLI a user runs by hand per the codegraph skill's own
- * instructions, never through claude-workspace, so nothing here ever
- * records it as "installed"). Best-effort: an installer that writes
+ * `creates`: project-root paths (files or folders) this tool's own installer
+ * is known to add *besides* .claude/skills/ — "hide" moves these into its
+ * stash too, and "unhide" puts them back, same as everything else. Declared
+ * right here, next to the entry it belongs to, rather than in a separate
+ * list elsewhere that's easy to forget to update when a new tool is added.
+ * Only swept for a tool "hide" finds actually recorded in this project's
+ * workspace.yaml (installed through claude-workspace itself) — see
+ * resolveCreatedPaths below. Best-effort: an installer that writes
  * somewhere undocumented/unpredictable (ui-ux-pro-max here) simply isn't
  * listed, and hide won't know to touch it.
  */
@@ -104,7 +104,7 @@ export const EXTERNAL_TOOLS = {
 		url: 'https://github.com/pbakaus/impeccable',
 		manualInstall: 'npx impeccable install',
 		steps: [{ command: 'npx', args: ['impeccable', 'install', '--providers=claude', '--scope=project'] }],
-		extraDirs: ['.impeccable'],
+		creates: ['.impeccable'],
 	},
 	superpowers: {
 		domain: 'general',
@@ -134,7 +134,7 @@ export const EXTERNAL_TOOLS = {
 		// Without --agent claude-code --copy above (fixed, but older installs
 		// predate the fix), the "skills" CLI defaults to its own agent-agnostic
 		// .agents/skills/ instead of .claude/skills/ — still swept up by hide.
-		extraDirs: ['.agents'],
+		creates: ['.agents'],
 	},
 	'ui-ux-pro-max': {
 		domain: 'design',
@@ -145,25 +145,6 @@ export const EXTERNAL_TOOLS = {
 			{ command: 'uipro', args: ['init', '--ai', 'claude'] },
 		],
 	},
-};
-
-/**
- * Every project-root folder "hide" knows to sweep up alongside
- * .claude/skills/, keyed by relative path: each EXTERNAL_TOOLS entry's own
- * `extraDirs`, plus tools that aren't in EXTERNAL_TOOLS at all because
- * claude-workspace never installs them itself — codegraph (a core skill,
- * not an external tool) only *documents* how to install the separate
- * CodeGraph MCP server; the user runs `codegraph install`/`codegraph init`
- * by hand, which is why nothing in workspace.yaml ever records it as
- * "installed" the way an external tool would be. Checked unconditionally
- * (existence only, not against what a workspace.yaml happens to have
- * recorded) so hide catches these even when they were set up outside
- * claude-workspace's own tracking.
- */
-export const KNOWN_EXTRA_DIRS = {
-	'.impeccable': 'impeccable',
-	'.agents': 'taste (legacy)',
-	'.codegraph': 'codegraph',
 };
 
 /**
@@ -188,6 +169,9 @@ export const REMOTE_SKILLS = {
 		skillName: 'claude-design',
 		description:
 			'Produce thoughtful, high-fidelity design artifacts in HTML — landing pages, slide decks, interactive prototypes, animated videos, posters, wireframes, and visual explorations.',
+		// Working files the skill itself instructs writing to the project root
+		// (fact-verification findings, brand asset inventory).
+		creates: ['product-facts.md', 'brand-spec.md'],
 	},
 	'api-designer': {
 		domain: 'backend',
@@ -320,6 +304,9 @@ export const REMOTE_SKILLS = {
 		source: 'Jeffallan/claude-skills',
 		skillName: 'feature-forge',
 		description: 'Conducts structured requirements workshops to produce feature specifications, user stories, EARS-format functional requirements.',
+		// Saves each spec as specs/{feature_name}.spec.md — the whole directory,
+		// since the filename varies per feature.
+		creates: ['specs'],
 	},
 };
 
@@ -484,6 +471,18 @@ export function projectPresetsDir(targetDir) {
 }
 
 /**
+ * A project's own list of extra paths for "hide" to sweep up, on top of
+ * whatever it already infers from workspace.yaml (see resolveCreatedPaths)
+ * — for anything hide has no other way to know about: a tool set up by
+ * hand, a personal note, a local file that just shouldn't be visible during
+ * a screen-share. Committed like a custom preset, so the whole team gets
+ * the same hide behavior after a clone.
+ */
+export function projectHideConfigPath(targetDir) {
+	return path.join(targetDir, '.claude-workspace', 'hide.yaml');
+}
+
+/**
  * Built-in presets (PRESETS_DIR) take priority, then a project-local custom
  * preset committed to this repo, then a personal one saved globally via the
  * init wizard (~/.claude-workspace/presets/) — so `init <custom-name>`
@@ -560,4 +559,38 @@ export async function describeSkill(kind, name) {
 	const file = path.join(SKILLS_DIR, kind, name, 'SKILL.md');
 	if (!existsSync(file)) return '';
 	return truncate(extractDescription(await fs.readFile(file, 'utf8')));
+}
+
+/**
+ * Pulls a plain `creates:` list out of a SKILL.md's YAML frontmatter (see
+ * codegraph's SKILL.md for an example) — reuses parseSimpleYaml on just the
+ * frontmatter block rather than a bespoke parser like extractDescription's,
+ * since a plain list (no folded-string handling needed) is exactly the
+ * shape parseSimpleYaml already supports.
+ */
+export function extractCreates(skillMd) {
+	const lines = skillMd.split(/\r?\n/);
+	if (lines[0]?.trim() !== '---') return [];
+	const end = lines.indexOf('---', 1);
+	const frontmatter = lines.slice(1, end === -1 ? undefined : end).join('\n');
+	return parseSimpleYaml(frontmatter).creates ?? [];
+}
+
+/**
+ * The project-root paths (files or folders, besides .claude/skills/ itself)
+ * a given installed name is known to add — used by "hide" to sweep them up
+ * too. Checks, in order: an external tool's own `creates` (catalog.js), a
+ * REMOTE_SKILLS catalog entry's `creates`, or — for a core/format skill,
+ * which this package vendors — a `creates:` list declared right in its own
+ * SKILL.md frontmatter, so a new core skill documents its own footprint
+ * instead of needing a change somewhere else too.
+ */
+export async function resolveCreatedPaths(name) {
+	if (EXTERNAL_TOOLS[name]) return EXTERNAL_TOOLS[name].creates ?? [];
+	if (REMOTE_SKILLS[name]) return REMOTE_SKILLS[name].creates ?? [];
+	for (const kind of ['core', 'formats']) {
+		const file = path.join(SKILLS_DIR, kind, name, 'SKILL.md');
+		if (existsSync(file)) return extractCreates(await fs.readFile(file, 'utf8'));
+	}
+	return [];
 }

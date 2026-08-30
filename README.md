@@ -151,14 +151,37 @@ claude-workspace unhide   # bring it all back exactly as it was
 ```
 
 `hide` moves everything claude-workspace put into the project — `.claude/skills/`,
-`.claude/workspace.yaml`, the generated block in `CLAUDE.md`, and any known companion tool's own
-folder (impeccable's `.impeccable/`, codegraph's `.codegraph/`, ...) — into a stash **outside the
-project entirely** (under `~/.claude-workspace/hidden/`, keyed by the project's path), so the project looks
-like it did before `init` ever ran, with nothing left in the project tree for an IDE (or `git
-status`) to show — a `.gitignore` entry only keeps a folder out of git, not out of view, which is
-why the stash doesn't live inside the project at all. The companion-tool folders are swept up
-whether or not `workspace.yaml` recorded them — codegraph, for instance, is a separate CLI
-installed and indexed entirely by hand, so nothing here ever "installs" it in the first place.
+`.claude/workspace.yaml`, the generated block in `CLAUDE.md`, and every currently-installed skill
+or tool's own declared extra paths (e.g. impeccable's `.impeccable/`, codegraph's `.codegraph/`,
+claude-design's `product-facts.md`/`brand-spec.md`) — into a stash **outside the project entirely**
+(under `~/.claude-workspace/hidden/`, keyed by the project's path), so the project looks like it
+did before `init` ever ran, with nothing left in the project tree for an IDE (or `git status`) to
+show — a `.gitignore` entry only keeps a folder out of git, not out of view, which is why the stash
+doesn't live inside the project at all.
+
+Which extra paths belong to which skill/tool is declared right where that skill/tool is defined —
+in a core or format skill's own `SKILL.md` frontmatter (`creates:`), or next to its entry in
+`REMOTE_SKILLS`/`EXTERNAL_TOOLS` — rather than a separate list `hide` checks unconditionally in
+every project regardless of relevance. `hide` only sweeps the extra paths for names it finds
+actually recorded in *this* project's `workspace.yaml`, so it only ever reverses what
+claude-workspace itself put here: a tool set up entirely by hand, bypassing claude-workspace (never
+run through `init`/`add`/`--with-external`), is out of scope by the same logic — nothing recorded
+it, so there's no declared path to look up for it.
+
+For anything hide has no other way to know about — a hand-set-up tool, a personal note, a local
+file you just don't want visible during a screen-share — list it yourself in
+`.claude-workspace/hide.yaml`:
+
+```yaml
+paths:
+  - .env.local
+  - notes/
+```
+
+Optional, and committed like a custom preset, so the whole team gets the same hide behavior after
+a clone. Each entry is relative to the project root; anything that would resolve outside the
+project (`..`, an absolute path) is skipped with a warning instead of moved.
+
 Useful for a screen-share, a clean `git diff`, or handing the project to someone who shouldn't see
 it, without losing anything. Never touches your `.gitignore`, and works the same whether
 `claude-workspace` itself is installed globally or only in this one project.
