@@ -5,8 +5,27 @@
 [![CI](https://github.com/whoaskedssselery/claude-workspace/actions/workflows/ci.yml/badge.svg)](https://github.com/whoaskedssselery/claude-workspace/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Sets up a project for Claude Code with one command: a curated set of skills, a workspace manifest,
-and a `CLAUDE.md` entry point — picked to match *how* you're working, not what tech stack you use.
+One command gives Claude Code the right skills, workflow and project instructions for a repo —
+kept reproducible and shareable across the team, the same way `package.json` pins dependencies.
+Picked to match *how* you're working (learning, day-to-day, a bug hunt, a redesign...), not what
+tech stack you use.
+
+## Contents
+
+- [Install & run](#install--run)
+- [Concepts](#concepts)
+- [Presets](#presets)
+- [Adding more with `--with=`](#adding-more-with---with)
+- [Adding a skill from any repository](#adding-a-skill-from-any-repository)
+- [Managing an existing workspace](#managing-an-existing-workspace)
+- [Temporarily hiding a workspace](#temporarily-hiding-a-workspace)
+- [Full command reference](#full-command-reference)
+- [Interactive wizard](#interactive-wizard)
+- [Custom presets](#custom-presets)
+- [Project structure](#project-structure)
+- [Local development](#local-development)
+- [Testing](#testing)
+- [Attribution](#attribution)
 
 ## Install & run
 
@@ -59,6 +78,22 @@ first). The wizard has the same guard.
 be committed and shared with the team — that's the point of the tool. Nothing is gitignored: if
 you don't want something claude-workspace added showing up in a commit, run `hide` first instead
 (see below).
+
+## Concepts
+
+Four kinds of thing get installed, and the catalog keeps them distinct because each one is
+installed a different way:
+
+- **preset** — a way of working, installed as a bundle (`learning`, `debug`, ...)
+- **skill** — one capability Claude Code consults when a task matches it; vendored in this repo
+  or fetched on demand from its author's own repository
+- **external tool** — a capability with its own installer or plugin marketplace, not a skill file
+  (`impeccable`, `superpowers`, ...) — `init`/`add` only ever run its installer
+- **format** — a small optional variant skill, added on top of a preset (`spike`,
+  `assignment-defend`)
+
+`--with=` (below) bolts any of the last three onto a preset. See [Where a skill's files actually
+come from](#where-a-skills-files-actually-come-from) for exactly how each is fetched.
 
 ## Presets
 
