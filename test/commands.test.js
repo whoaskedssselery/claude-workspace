@@ -11,7 +11,7 @@ import path from 'node:path';
 const fakeHome = mkdtempSync(path.join(os.tmpdir(), 'claude-workspace-home-'));
 process.env.CLAUDE_WORKSPACE_HOME = fakeHome;
 
-const { init, doctor, addSkills, removeSkills, loadPreset } = await import('../scripts/workspace.js');
+const { init, doctor, addSkills, removeSkills, loadPreset, readHideConfig } = await import('../scripts/workspace.js');
 const { GLOBAL_PRESETS_DIR, loadConfig, saveConfig } = await import('../scripts/lib/i18n.js');
 
 function tmpDir() {
@@ -135,6 +135,26 @@ describe('addSkills / removeSkills', () => {
 		try {
 			await init('oss-contribution', dir, {});
 			await removeSkills(dir, ['not-installed']);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('remove drops the removed name\'s own paths from hide.yaml too, keeping .claude/CLAUDE.md', async () => {
+		const dir = tmpDir();
+		try {
+			// codegraph is core in oss-contribution, and declares "creates: [.codegraph]"
+			// in its own SKILL.md frontmatter — seeded into hide.yaml by "init".
+			await init('oss-contribution', dir, {});
+			let paths = await readHideConfig(dir);
+			assert.ok(paths.includes('.codegraph'));
+
+			await removeSkills(dir, ['codegraph']);
+
+			paths = await readHideConfig(dir);
+			assert.ok(!paths.includes('.codegraph'));
+			assert.ok(paths.includes('.claude'));
+			assert.ok(paths.includes('CLAUDE.md'));
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}

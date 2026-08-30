@@ -202,20 +202,20 @@ export async function readHideConfig(targetDir) {
 	return paths.filter((rel) => {
 		const resolved = path.resolve(root, rel);
 		const safe = !path.isAbsolute(rel) && (resolved === root || resolved.startsWith(root + path.sep));
-		if (!safe) warn(`.claude-workspace/hide.yaml: ignoring "${rel}" — not a path inside the project.`);
+		if (!safe) warn(`.claude/hide.yaml: ignoring "${rel}" — not a path inside the project.`);
 		return safe;
 	});
 }
 
 /**
- * Appends paths to this project's .claude-workspace/hide.yaml, creating the
- * file (and its directory) if needed, and de-duplicating against whatever it
- * already lists. Called by seedHideConfig (commands.js) after "init"/"add"/
- * "sync" — with `.claude` and `CLAUDE.md` themselves always included, plus
- * whatever a just-installed name's own `creates:` declares (see
- * resolveCreatedPaths in catalog.js) — that's the one moment
- * claude-workspace actually knows what a name just added, so it's recorded
- * here instead of "hide" re-deriving it from workspace.yaml on every run.
+ * Appends paths to this project's .claude/hide.yaml, creating the file (and
+ * its directory) if needed, and de-duplicating against whatever it already
+ * lists. Called by seedHideConfig (commands.js) after "init"/"add"/"sync" —
+ * with `.claude` and `CLAUDE.md` themselves always included, plus whatever a
+ * just-installed name's own `creates:` declares (see resolveCreatedPaths in
+ * catalog.js) — that's the one moment claude-workspace actually knows what a
+ * name just added, so it's recorded here instead of "hide" re-deriving it
+ * from workspace.yaml on every run.
  */
 export async function recordHideConfigPaths(targetDir, paths) {
 	if (!paths.length) return;
@@ -227,8 +227,31 @@ export async function recordHideConfigPaths(targetDir, paths) {
 }
 
 /**
- * Temporarily moves everything the project's own .claude-workspace/hide.yaml
- * lists (see readHideConfig above, and recordHideConfigPaths for how it gets
+ * Removes paths from this project's .claude/hide.yaml — the inverse of
+ * recordHideConfigPaths, called by "remove" (commands.js) with a removed
+ * name's own `creates:` paths, so a skill/tool that's no longer installed
+ * doesn't leave its swept path listed forever. `.claude` and `CLAUDE.md`
+ * themselves are never at risk here — they aren't any name's `creates:`
+ * value, only seedHideConfig adds those, unconditionally, at install time.
+ * `stillNeeded` (another currently-installed name's own creates paths) is
+ * subtracted from what gets dropped, so removing one skill doesn't stop
+ * hiding a path a different installed skill still needs swept. Missing
+ * file is a no-op.
+ */
+export async function forgetHideConfigPaths(targetDir, paths, stillNeeded = []) {
+	if (!paths.length) return;
+	const file = projectHideConfigPath(targetDir);
+	if (!existsSync(file)) return;
+	const existing = parseSimpleYaml(await fs.readFile(file, 'utf8')).paths ?? [];
+	const drop = new Set(paths.filter((p) => !stillNeeded.includes(p)));
+	if (!drop.size) return;
+	const remaining = existing.filter((p) => !drop.has(p));
+	await fs.writeFile(file, `paths:\n${renderYamlList(remaining)}\n`, 'utf8');
+}
+
+/**
+ * Temporarily moves everything the project's own .claude/hide.yaml lists
+ * (see readHideConfig above, and recordHideConfigPaths for how it gets
  * populated — `.claude` and `CLAUDE.md` by default, plus a just-installed
  * name's own known extra paths like impeccable's .impeccable/, codegraph's
  * .codegraph/, claude-design's product-facts.md, and anything the user added
@@ -237,7 +260,8 @@ export async function recordHideConfigPaths(targetDir, paths) {
  * hide.yaml is the only thing "hide" consults — no separate handling for
  * .claude/skills/, workspace.yaml or CLAUDE.md's generated block; both of
  * those are already covered by the `.claude`/`CLAUDE.md` entries hide.yaml
- * carries by default.
+ * carries by default. hide.yaml lives inside `.claude/` itself, so sweeping
+ * `.claude` as a whole takes it along too — nothing extra to special-case.
  *
  * This is a stash, not a sync: `unhideWorkspace` restores the pre-hide
  * snapshot byte-for-byte rather than trying to merge in whatever changed

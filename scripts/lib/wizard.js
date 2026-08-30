@@ -138,7 +138,7 @@ function printSummary(lang, { presetName, core, skills, external }) {
 	console.log(summaryLine(t(lang, 'summarySkills'), skills, t(lang, 'none')));
 	console.log(summaryLine(t(lang, 'summaryExternal'), external, t(lang, 'none')));
 	console.log(`\n  ${dim(t(lang, 'summaryFiles') + ':')}`);
-	for (const file of ['.claude/skills/', '.claude/workspace.yaml', 'CLAUDE.md', '.claude-workspace/hide.yaml']) {
+	for (const file of ['.claude/skills/', '.claude/workspace.yaml', 'CLAUDE.md', '.claude/hide.yaml']) {
 		console.log(`  ${green('✓')} ${file}`);
 	}
 	console.log('');

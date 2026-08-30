@@ -47,14 +47,14 @@ claude-workspace init <preset>
   even before anything decides to open the skill file — and tells Claude explicitly to combine
   every applicable skill on a given task instead of stopping at the first match, which is the most
   common way multi-skill setups end up under-used
-- `.claude-workspace/hide.yaml` — a plain list of project-root paths (starting with `.claude` and
-  `CLAUDE.md` themselves) that [`hide`](#temporarily-hiding-a-workspace) knows to sweep out of the
-  project right before a commit
+- `.claude/hide.yaml` — a plain list of project-root paths (starting with `.claude` and `CLAUDE.md`
+  themselves) that [`hide`](#temporarily-hiding-a-workspace) knows to sweep out of the project
+  right before a commit
 
-`.claude/skills/`, `.claude/workspace.yaml`, `CLAUDE.md` and `.claude-workspace/hide.yaml` are all
-meant to be committed and shared with the team — that's the point of the tool. Nothing is
-gitignored: if you don't want something claude-workspace added showing up in a commit, run `hide`
-first instead (see below).
+`.claude/skills/`, `.claude/workspace.yaml`, `CLAUDE.md` and `.claude/hide.yaml` are all meant to
+be committed and shared with the team — that's the point of the tool. Nothing is gitignored: if
+you don't want something claude-workspace added showing up in a commit, run `hide` first instead
+(see below).
 
 ## Presets
 
@@ -153,20 +153,22 @@ anything you write outside them is never touched.
 ### Temporarily hiding a workspace
 
 ```bash
-claude-workspace hide     # stash everything listed in .claude-workspace/hide.yaml
+claude-workspace hide     # stash everything listed in .claude/hide.yaml
 claude-workspace unhide   # bring it all back exactly as it was
 ```
 
 Nothing claude-workspace adds to a project is gitignored — `.claude/`, `CLAUDE.md`, all of it is
 meant to be committed. When you don't want it showing up in a particular commit (a screen-share, a
 clean `git diff`, handing the project to someone who shouldn't see it yet), run `hide` first instead
-of permanently excluding anything.
+of permanently excluding anything: `hide`, then commit and push as normal, then `unhide` to get
+everything back locally — the pushed history has no claude-workspace trace in it at all for that
+commit, and nothing is left behind in the working tree either.
 
-`hide` moves every path listed in the project's own `.claude-workspace/hide.yaml` into a stash
-**outside the project entirely** (under `~/.claude-workspace/hidden/`, keyed by the project's path),
-so the project looks like it did before `init` ever ran, with nothing left in the project tree for
-an IDE (or `git status`) to show — a `.gitignore` entry only keeps a folder out of git, not out of
-view, which is why the stash doesn't live inside the project at all.
+`hide` moves every path listed in the project's own `.claude/hide.yaml` into a stash **outside the
+project entirely** (under `~/.claude-workspace/hidden/`, keyed by the project's path), so the
+project looks like it did before `init` ever ran, with nothing left in the project tree for an IDE
+(or `git status`) to show — a `.gitignore` entry only keeps a folder out of git, not out of view,
+which is why the stash doesn't live inside the project at all.
 
 `hide.yaml` is the *only* thing `hide` consults — there's no separate special-casing for
 `.claude/skills/`, `workspace.yaml` or `CLAUDE.md`'s generated block anywhere else:
@@ -178,13 +180,20 @@ paths:
   - .impeccable
 ```
 
+It deliberately lives at `.claude/hide.yaml`, inside the folder it mostly describes: `.claude` is
+itself one of the paths being swept as a single unit, so `hide.yaml` — along with the rest of
+`.claude/` — moves into the stash and comes back with it on `unhide`, the same as everything else
+it lists. Nothing is ever left behind in the project root besides `.claude/` and `CLAUDE.md` either
+way.
+
 `init` seeds it with `.claude` and `CLAUDE.md` themselves, plus whatever a just-installed skill or
 tool is known to create besides those — declared right where that skill/tool is defined, in a core
 or format skill's own `SKILL.md` frontmatter (`creates:`), or next to its entry in
 `REMOTE_SKILLS`/`EXTERNAL_TOOLS` (e.g. impeccable's `.impeccable/`, codegraph's `.codegraph/`,
 claude-design's `product-facts.md`/`brand-spec.md`). `add` and `sync` keep the list current the same
 way, so a tool added later, or one added by hand to `workspace.yaml` and picked up by a `sync`,
-still gets its paths recorded.
+still gets its paths recorded — and `remove` drops a removed name's own paths again, unless another
+still-installed name also declares the same one.
 
 For anything claude-workspace has no way to know about on its own — a hand-set-up tool, a personal
 note, a local file you just don't want visible during a screen-share — add it yourself, same file:
@@ -197,9 +206,9 @@ paths:
   - notes/
 ```
 
-Committed like a custom preset, so the whole team gets the same hide behavior after a clone. Each
-entry is relative to the project root; anything that would resolve outside the project (`..`, an
-absolute path) is skipped with a warning instead of moved.
+Committed like the rest of `.claude/`, so the whole team gets the same hide behavior after a clone.
+Each entry is relative to the project root; anything that would resolve outside the project (`..`,
+an absolute path) is skipped with a warning instead of moved.
 
 Works the same whether `claude-workspace` itself is installed globally or only in this one project.
 

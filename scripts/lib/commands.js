@@ -44,6 +44,7 @@ import {
 	hideWorkspace,
 	unhideWorkspace,
 	recordHideConfigPaths,
+	forgetHideConfigPaths,
 } from './manifest.js';
 import {
 	looksLikeSkillSource,
@@ -60,7 +61,7 @@ const __filename = fileURLToPath(import.meta.url);
 /**
  * Resolves and records the extra project-root paths (`creates:`) that each
  * just-installed name is known to add, into this project's own
- * .claude-workspace/hide.yaml — the one moment claude-workspace actually
+ * .claude/hide.yaml — the one moment claude-workspace actually
  * knows what a name just added, so "hide" doesn't have to re-derive it from
  * workspace.yaml later (see resolveCreatedPaths in catalog.js,
  * recordHideConfigPaths in manifest.js). Always includes `.claude` and
@@ -338,7 +339,7 @@ export async function doctor(targetDir) {
 
 /**
  * Temporarily removes everything listed in the project's own
- * .claude-workspace/hide.yaml (.claude/, CLAUDE.md, and any skill/tool's own
+ * .claude/hide.yaml (.claude/, CLAUDE.md, and any skill/tool's own
  * extra paths by default — see seedHideConfig above) — stashing it OUTSIDE
  * the project (see hiddenDir in manifest.js) so nothing is left sitting in
  * the project tree, and "unhide" can put it all back exactly as it was.
@@ -511,6 +512,7 @@ export async function removeSkills(targetDir, names, { global = false } = {}) {
 	let external = manifest.external ?? [];
 	let remote = decodeRemoteList(manifest.remote);
 	const skillsDestDir = path.join(targetDir, '.claude', 'skills');
+	const removedNames = [];
 
 	for (const name of names) {
 		const wasCore = core.includes(name);
@@ -525,6 +527,7 @@ export async function removeSkills(targetDir, names, { global = false } = {}) {
 		skills = skills.filter((n) => n !== name);
 		external = external.filter((n) => n !== name);
 		remote = remote.filter((r) => r.name !== name);
+		removedNames.push(name);
 
 		if (isSafeName(name)) {
 			const dir = path.join(skillsDestDir, name);
@@ -534,6 +537,19 @@ export async function removeSkills(targetDir, names, { global = false } = {}) {
 	}
 
 	await writeWorkspaceManifest(targetDir, manifest.preset ?? 'custom', core, skills, external, remote);
+
+	// Drop each removed name's own declared extra paths from hide.yaml too —
+	// otherwise a skill's swept path (e.g. feature-forge's specs/) stays
+	// listed forever after the skill itself is gone. A path another
+	// still-installed name also declares is left alone.
+	if (removedNames.length) {
+		const remainingNames = [...core, ...skills, ...external, ...remote.map((r) => r.name)];
+		const stillNeeded = (await Promise.all(remainingNames.map((n) => resolveCreatedPaths(n)))).flat();
+		for (const name of removedNames) {
+			await forgetHideConfigPaths(targetDir, await resolveCreatedPaths(name), stillNeeded);
+		}
+	}
+
 	console.log(`\nRemoved. Remaining: ${core.length + skills.length + remote.length} skill(s); external: ${external.join(', ') || 'none'}.\n`);
 }
 

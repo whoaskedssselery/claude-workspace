@@ -114,22 +114,23 @@ Commands:
                   recorded toolkit version matches what's running.
 
   hide            Temporarily moves everything listed in the project's own
-                  .claude-workspace/hide.yaml into a stash OUTSIDE the
-                  project (~/.claude-workspace/hidden/), so nothing is left
-                  in the project tree and it looks like it did before "init"
-                  ever ran. Nothing claude-workspace adds is gitignored —
-                  run "hide" right before a commit instead, and none of it
-                  ends up in that commit.
+                  .claude/hide.yaml into a stash OUTSIDE the project
+                  (~/.claude-workspace/hidden/), so nothing is left in the
+                  project tree and it looks like it did before "init" ever
+                  ran. Nothing claude-workspace adds is gitignored — run
+                  "hide" right before a commit instead, and none of it ends
+                  up in that commit.
 
-                  .claude-workspace/hide.yaml is a plain list of project-root
-                  paths to sweep up — the only thing "hide" consults, no
+                  .claude/hide.yaml is a plain list of project-root paths
+                  to sweep up — the only thing "hide" consults, no
                   special-casing for .claude/skills/, workspace.yaml or
                   CLAUDE.md's generated block anywhere else. "init" seeds it
                   with ".claude" and "CLAUDE.md" themselves; "init"/"add"/
                   "sync" also add whatever a just-installed skill/tool is
                   known to create (impeccable's .impeccable/, codegraph's
-                  .codegraph/, ...) — add your own entries by hand for
-                  anything else, e.g.:
+                  .codegraph/, ...), and "remove" drops a removed name's
+                  entries again — add your own entries by hand for anything
+                  else, e.g.:
                     paths:
                       - .claude
                       - CLAUDE.md
@@ -360,6 +361,7 @@ export {
 	unhideWorkspace,
 	readHideConfig,
 	recordHideConfigPaths,
+	forgetHideConfigPaths,
 } from './lib/manifest.js';
 
 export {

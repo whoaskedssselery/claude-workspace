@@ -89,7 +89,7 @@ export function fetchLatestVersion({ timeout = 2500, url = 'https://registry.npm
  *
  * `creates`: project-root paths (files or folders) this tool's own installer
  * is known to add *besides* .claude/skills/ — recorded into the project's
- * own .claude-workspace/hide.yaml the moment the tool is installed (see
+ * own .claude/hide.yaml the moment the tool is installed (see
  * resolveCreatedPaths below and recordHideConfigPaths in manifest.js), so
  * "hide" later moves these into its stash too, and "unhide" puts them back,
  * same as everything else. Declared right here, next to the entry it
@@ -473,14 +473,22 @@ export function projectPresetsDir(targetDir) {
  * don't need their own entries), plus whatever a just-installed name's own
  * `creates:` declares (see resolveCreatedPaths below and
  * recordHideConfigPaths in manifest.js) — "add"/"sync" keep it current the
- * same way. Add entries by hand for anything claude-workspace has no other
- * way to know about — a tool set up by hand, a personal note, a local file
- * that just shouldn't be visible during a screen-share. Committed like a
- * custom preset, so the whole team gets the same hide behavior after a
- * clone.
+ * same way, and "remove" drops a removed name's entries again (see
+ * forgetHideConfigPaths in manifest.js). Add entries by hand for anything
+ * claude-workspace has no other way to know about — a tool set up by hand,
+ * a personal note, a local file that just shouldn't be visible during a
+ * screen-share.
+ *
+ * Lives *inside* `.claude/` deliberately, not in a separate directory:
+ * `.claude` is itself one of the paths "hide" sweeps as a single unit, so
+ * hide.yaml — along with the rest of `.claude/` — goes into the stash and
+ * comes back with it on "unhide", the same as everything else it lists.
+ * Nothing extra to preserve, and nothing left behind in the project root
+ * besides `.claude/` and `CLAUDE.md` either way. Committed like the rest of
+ * `.claude/`, so the whole team gets the same hide behavior after a clone.
  */
 export function projectHideConfigPath(targetDir) {
-	return path.join(targetDir, '.claude-workspace', 'hide.yaml');
+	return path.join(targetDir, '.claude', 'hide.yaml');
 }
 
 /**

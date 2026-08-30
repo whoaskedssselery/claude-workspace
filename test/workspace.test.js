@@ -699,13 +699,13 @@ describe('hide / unhide', () => {
 
 			assert.equal(existsSync(path.join(dir, '.claude')), false);
 			assert.equal(existsSync(path.join(dir, 'CLAUDE.md')), false);
-			// .claude-workspace/hide.yaml itself is meant to stay in the project
-			// (committed, like a custom preset) — only .claude/ and CLAUDE.md are
-			// swept into the stash, which lives OUTSIDE the project entirely, so
-			// an IDE's project tree (or `git status`) shows nothing extra either way.
-			assert.equal(existsSync(path.join(dir, '.claude-workspace', 'hide.yaml')), true);
+			// hide.yaml lives inside .claude/, so sweeping .claude as a whole
+			// takes it along too — nothing at all is left in the project root,
+			// so an IDE's project tree (or `git status`) shows nothing extra.
+			assert.equal(existsSync(path.join(dir, '.claude-workspace')), false);
 			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'custom__.claude', 'skills', 'commit-discipline')), true);
 			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'custom__.claude', 'workspace.yaml')), true);
+			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'custom__.claude', 'hide.yaml')), true);
 			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'custom__CLAUDE.md')), true);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
@@ -798,17 +798,17 @@ describe('hide / unhide', () => {
 		}
 	});
 
-	test('hide sweeps up paths listed in .claude-workspace/hide.yaml even though nothing recorded them, and unhide puts them back', async () => {
+	test('hide sweeps up paths listed in .claude/hide.yaml even though nothing recorded them, and unhide puts them back', async () => {
 		const dir = tmpDir();
 		try {
 			await init('oss-contribution', dir, {});
 			await fs.mkdir(path.join(dir, 'notes'), { recursive: true });
 			await fs.writeFile(path.join(dir, 'notes', 'secret.md'), 'shh', 'utf8');
 			await fs.writeFile(path.join(dir, '.env.local'), 'SECRET=1', 'utf8');
-			await fs.mkdir(path.join(dir, '.claude-workspace'), { recursive: true });
+			const existingPaths = await readHideConfig(dir);
 			await fs.writeFile(
 				projectHideConfigPath(dir),
-				'paths:\n  - notes\n  - .env.local\n',
+				`paths:\n${[...existingPaths, 'notes', '.env.local'].map((p) => `  - ${p}`).join('\n')}\n`,
 				'utf8'
 			);
 
@@ -833,7 +833,6 @@ describe('hide / unhide', () => {
 		console.warn = (...args) => warnings.push(args.join(' '));
 		try {
 			await init('oss-contribution', dir, {});
-			await fs.mkdir(path.join(dir, '.claude-workspace'), { recursive: true });
 			await fs.writeFile(projectHideConfigPath(dir), 'paths:\n  - ../outside\n  - /etc/passwd\n', 'utf8');
 
 			const paths = await readHideConfig(dir);
