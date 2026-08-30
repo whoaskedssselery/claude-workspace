@@ -47,11 +47,14 @@ claude-workspace init <preset>
   even before anything decides to open the skill file — and tells Claude explicitly to combine
   every applicable skill on a given task instead of stopping at the first match, which is the most
   common way multi-skill setups end up under-used
-- a small marked block in `.gitignore` for the one thing that's genuinely personal:
-  `.claude/settings.local.json` and `.DS_Store`
+- `.claude-workspace/hide.yaml` — a plain list of project-root paths (starting with `.claude` and
+  `CLAUDE.md` themselves) that [`hide`](#temporarily-hiding-a-workspace) knows to sweep out of the
+  project right before a commit
 
-Everything else (`.claude/skills/`, `.claude/workspace.yaml`, `CLAUDE.md`) is meant to be committed
-and shared with the team — that's the point of the tool.
+`.claude/skills/`, `.claude/workspace.yaml`, `CLAUDE.md` and `.claude-workspace/hide.yaml` are all
+meant to be committed and shared with the team — that's the point of the tool. Nothing is
+gitignored: if you don't want something claude-workspace added showing up in a commit, run `hide`
+first instead (see below).
 
 ## Presets
 
@@ -135,8 +138,8 @@ claude-workspace update            # update the package itself, then sync
 ```
 
 `doctor` reports, per installed skill: **ok**, **outdated** (content drifted, run `sync`), or
-**missing** — plus whether the recorded toolkit version matches what's running, and whether
-`CLAUDE.md`/`.gitignore` are set up correctly.
+**missing** — plus whether the recorded toolkit version matches what's running and whether
+`CLAUDE.md` is set up correctly.
 
 `sync` re-copies whatever `.claude/workspace.yaml` declares, from the currently installed package —
 run it after upgrading `claude-workspace` to pick up skill content changes. It also refreshes
@@ -150,45 +153,55 @@ anything you write outside them is never touched.
 ### Temporarily hiding a workspace
 
 ```bash
-claude-workspace hide     # stash .claude/skills/, workspace.yaml and the CLAUDE.md block
+claude-workspace hide     # stash everything listed in .claude-workspace/hide.yaml
 claude-workspace unhide   # bring it all back exactly as it was
 ```
 
-`hide` moves everything claude-workspace put into the project — `.claude/skills/`,
-`.claude/workspace.yaml`, the generated block in `CLAUDE.md`, and every currently-installed skill
-or tool's own declared extra paths (e.g. impeccable's `.impeccable/`, codegraph's `.codegraph/`,
-claude-design's `product-facts.md`/`brand-spec.md`) — into a stash **outside the project entirely**
-(under `~/.claude-workspace/hidden/`, keyed by the project's path), so the project looks like it
-did before `init` ever ran, with nothing left in the project tree for an IDE (or `git status`) to
-show — a `.gitignore` entry only keeps a folder out of git, not out of view, which is why the stash
-doesn't live inside the project at all.
+Nothing claude-workspace adds to a project is gitignored — `.claude/`, `CLAUDE.md`, all of it is
+meant to be committed. When you don't want it showing up in a particular commit (a screen-share, a
+clean `git diff`, handing the project to someone who shouldn't see it yet), run `hide` first instead
+of permanently excluding anything.
 
-Which extra paths belong to which skill/tool is declared right where that skill/tool is defined —
-in a core or format skill's own `SKILL.md` frontmatter (`creates:`), or next to its entry in
-`REMOTE_SKILLS`/`EXTERNAL_TOOLS` — rather than a separate list `hide` checks unconditionally in
-every project regardless of relevance. `hide` only sweeps the extra paths for names it finds
-actually recorded in *this* project's `workspace.yaml`, so it only ever reverses what
-claude-workspace itself put here: a tool set up entirely by hand, bypassing claude-workspace (never
-run through `init`/`add`/`--with-external`), is out of scope by the same logic — nothing recorded
-it, so there's no declared path to look up for it.
+`hide` moves every path listed in the project's own `.claude-workspace/hide.yaml` into a stash
+**outside the project entirely** (under `~/.claude-workspace/hidden/`, keyed by the project's path),
+so the project looks like it did before `init` ever ran, with nothing left in the project tree for
+an IDE (or `git status`) to show — a `.gitignore` entry only keeps a folder out of git, not out of
+view, which is why the stash doesn't live inside the project at all.
 
-For anything hide has no other way to know about — a hand-set-up tool, a personal note, a local
-file you just don't want visible during a screen-share — list it yourself in
-`.claude-workspace/hide.yaml`:
+`hide.yaml` is the *only* thing `hide` consults — there's no separate special-casing for
+`.claude/skills/`, `workspace.yaml` or `CLAUDE.md`'s generated block anywhere else:
 
 ```yaml
 paths:
+  - .claude
+  - CLAUDE.md
+  - .impeccable
+```
+
+`init` seeds it with `.claude` and `CLAUDE.md` themselves, plus whatever a just-installed skill or
+tool is known to create besides those — declared right where that skill/tool is defined, in a core
+or format skill's own `SKILL.md` frontmatter (`creates:`), or next to its entry in
+`REMOTE_SKILLS`/`EXTERNAL_TOOLS` (e.g. impeccable's `.impeccable/`, codegraph's `.codegraph/`,
+claude-design's `product-facts.md`/`brand-spec.md`). `add` and `sync` keep the list current the same
+way, so a tool added later, or one added by hand to `workspace.yaml` and picked up by a `sync`,
+still gets its paths recorded.
+
+For anything claude-workspace has no way to know about on its own — a hand-set-up tool, a personal
+note, a local file you just don't want visible during a screen-share — add it yourself, same file:
+
+```yaml
+paths:
+  - .claude
+  - CLAUDE.md
   - .env.local
   - notes/
 ```
 
-Optional, and committed like a custom preset, so the whole team gets the same hide behavior after
-a clone. Each entry is relative to the project root; anything that would resolve outside the
-project (`..`, an absolute path) is skipped with a warning instead of moved.
+Committed like a custom preset, so the whole team gets the same hide behavior after a clone. Each
+entry is relative to the project root; anything that would resolve outside the project (`..`, an
+absolute path) is skipped with a warning instead of moved.
 
-Useful for a screen-share, a clean `git diff`, or handing the project to someone who shouldn't see
-it, without losing anything. Never touches your `.gitignore`, and works the same whether
-`claude-workspace` itself is installed globally or only in this one project.
+Works the same whether `claude-workspace` itself is installed globally or only in this one project.
 
 `unhide` reverses it — but it's a stash, not a sync: it restores the exact pre-hide snapshot rather
 than merging in anything that changed while hidden. Running `hide` twice without an `unhide` in
@@ -261,7 +274,7 @@ one.
 ```
 scripts/workspace.js     CLI entrypoint — argv parsing and --help text only
 scripts/lib/catalog.js   what this package ships: presets, skills, external tools, the YAML parser
-scripts/lib/manifest.js  a project's installed workspace: workspace.yaml, CLAUDE.md, .gitignore
+scripts/lib/manifest.js  a project's installed workspace: workspace.yaml, CLAUDE.md, hide.yaml
 scripts/lib/remote.js    fetching a skill from an arbitrary repo (`add <url>`)
 scripts/lib/pm.js        package-manager / npx-dlx detection, used by `update`
 scripts/lib/commands.js  command implementations, built on the four files above
@@ -301,9 +314,9 @@ npm test
 ```
 
 Zero dependencies, including for tests — runs on Node's built-in test runner (Node 18/20/22 on
-every push and PR). Covers the YAML parser, typo suggestions, `.gitignore` merging, `init`/`sync`/
-`doctor`/`add`/`remove` end-to-end against real presets in a temp directory, custom presets, and
-the wizard's non-interactive logic. The wizard's raw-mode keyboard loop needs a real TTY and is
+every push and PR). Covers the YAML parser, typo suggestions, `init`/`sync`/`doctor`/`add`/`remove`/
+`hide`/`unhide` end-to-end against real presets in a temp directory, custom presets, and the
+wizard's non-interactive logic. The wizard's raw-mode keyboard loop needs a real TTY and is
 exercised manually rather than in CI.
 
 ## Attribution

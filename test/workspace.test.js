@@ -28,8 +28,8 @@ const {
 	namesInDomain,
 	loadPreset,
 	projectPresetsDir,
-	ensureGitignore,
 	init,
+	installPreset,
 	writeClaudeMd,
 	writeWorkspaceManifest,
 	encodeRemoteList,
@@ -318,44 +318,6 @@ describe('isSafeName', () => {
 	});
 });
 
-describe('ensureGitignore', () => {
-	let dir;
-	before(() => {
-		dir = tmpDir();
-	});
-	after(() => {
-		rmSync(dir, { recursive: true, force: true });
-	});
-
-	test('creates .gitignore with the marked block when none exists', async () => {
-		await ensureGitignore(dir);
-		const content = await fs.readFile(path.join(dir, '.gitignore'), 'utf8');
-		assert.ok(content.includes('.claude/settings.local.json'));
-		assert.ok(content.includes('.DS_Store'));
-	});
-
-	test('is idempotent — running it again does not duplicate the block', async () => {
-		await ensureGitignore(dir);
-		const content = await fs.readFile(path.join(dir, '.gitignore'), 'utf8');
-		const occurrences = content.split('.claude/settings.local.json').length - 1;
-		assert.equal(occurrences, 1);
-	});
-
-	test('preserves pre-existing content in an existing .gitignore', async () => {
-		const dir2 = tmpDir();
-		try {
-			await fs.writeFile(path.join(dir2, '.gitignore'), 'node_modules/\ndist/\n', 'utf8');
-			await ensureGitignore(dir2);
-			const content = await fs.readFile(path.join(dir2, '.gitignore'), 'utf8');
-			assert.ok(content.includes('node_modules/'));
-			assert.ok(content.includes('dist/'));
-			assert.ok(content.includes('.claude/settings.local.json'));
-		} finally {
-			rmSync(dir2, { recursive: true, force: true });
-		}
-	});
-});
-
 describe('detectPackageManager', () => {
 	test('detects pnpm from a pnpm global-store-style path', () => {
 		assert.equal(
@@ -594,7 +556,9 @@ describe('init', () => {
 			assert.ok(workspaceYaml.includes('preset: oss-contribution'));
 
 			assert.ok(existsSync(path.join(dir, 'CLAUDE.md')));
-			assert.ok(existsSync(path.join(dir, '.gitignore')));
+			// Nothing claude-workspace adds is gitignored — "hide" is how you keep
+			// it out of a commit, not a permanent exclusion.
+			assert.equal(existsSync(path.join(dir, '.gitignore')), false);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
@@ -637,7 +601,11 @@ describe('init', () => {
 	test('external tools are not installed without --with-external or a matching --with=', async () => {
 		const dir = tmpDir();
 		try {
-			await init('redesign', dir, {});
+			// A hand-built preset with only an external tool in `skills:` (no
+			// REMOTE_SKILLS entry) — avoids installPreset also trying to fetch
+			// react-best-practices over the network, the way the "redesign"
+			// built-in preset would, for a test that isn't about remote fetches.
+			await installPreset({ core: [], skills: ['taste'] }, 'external-only-test', dir, {});
 			assert.equal(existsSync(path.join(dir, '.claude', 'skills', 'taste')), false);
 			const workspaceYaml = await fs.readFile(path.join(dir, '.claude', 'workspace.yaml'), 'utf8');
 			assert.match(workspaceYaml, /external:\s*\n\s*\[\]/);
@@ -709,23 +677,36 @@ describe('addSkills', () => {
 });
 
 describe('hide / unhide', () => {
-	test('hide moves .claude/skills, workspace.yaml and the CLAUDE.md block into the stash, leaving no trace in the project', async () => {
+	test('init seeds hide.yaml with .claude and CLAUDE.md by default, no separate .claude/skills/ or workspace.yaml entries', async () => {
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			const paths = await readHideConfig(dir);
+			assert.ok(paths.includes('.claude'));
+			assert.ok(paths.includes('CLAUDE.md'));
+			assert.ok(!paths.some((p) => p.includes('skills')));
+			assert.ok(!paths.some((p) => p.includes('workspace.yaml')));
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('hide moves the whole .claude/ and CLAUDE.md into the stash, leaving no trace in the project', async () => {
 		const dir = tmpDir();
 		try {
 			await init('oss-contribution', dir, {});
 			await hide(dir);
 
-			assert.equal(existsSync(path.join(dir, '.claude', 'skills')), false);
-			assert.equal(existsSync(path.join(dir, '.claude', 'workspace.yaml')), false);
-			// The stash itself must not live inside the project — an IDE's
-			// project tree (or `git status`) would still show it otherwise,
-			// .gitignore or not.
-			assert.equal(existsSync(path.join(dir, '.claude-workspace')), false);
-			assert.equal(existsSync(path.join(hiddenDir(dir), 'skills', 'commit-discipline')), true);
-			assert.equal(existsSync(path.join(hiddenDir(dir), 'workspace.yaml')), true);
-
-			const claudeMd = await fs.readFile(path.join(dir, 'CLAUDE.md'), 'utf8');
-			assert.doesNotMatch(claudeMd, /claude-workspace:start/);
+			assert.equal(existsSync(path.join(dir, '.claude')), false);
+			assert.equal(existsSync(path.join(dir, 'CLAUDE.md')), false);
+			// .claude-workspace/hide.yaml itself is meant to stay in the project
+			// (committed, like a custom preset) — only .claude/ and CLAUDE.md are
+			// swept into the stash, which lives OUTSIDE the project entirely, so
+			// an IDE's project tree (or `git status`) shows nothing extra either way.
+			assert.equal(existsSync(path.join(dir, '.claude-workspace', 'hide.yaml')), true);
+			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'custom__.claude', 'skills', 'commit-discipline')), true);
+			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'custom__.claude', 'workspace.yaml')), true);
+			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'custom__CLAUDE.md')), true);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
@@ -752,34 +733,19 @@ describe('hide / unhide', () => {
 		}
 	});
 
-	test('hide never touches the project .gitignore', async () => {
-		const dir = tmpDir();
-		try {
-			await init('oss-contribution', dir, {});
-			const gitignoreBefore = await fs.readFile(path.join(dir, '.gitignore'), 'utf8');
-
-			await hide(dir);
-
-			const gitignoreAfter = await fs.readFile(path.join(dir, '.gitignore'), 'utf8');
-			assert.equal(gitignoreAfter, gitignoreBefore);
-		} finally {
-			rmSync(dir, { recursive: true, force: true });
-		}
-	});
-
-	test('hide sweeps up a currently-installed name\'s own extra paths (codegraph is core, so no recording needed), and unhide puts them back', async () => {
+	test('hide sweeps up a currently-installed name\'s own extra paths (codegraph is core, seeded into hide.yaml at init time), and unhide puts them back', async () => {
 		const dir = tmpDir();
 		try {
 			// codegraph is part of oss-contribution's core: list already —
 			// its .codegraph/ folder (declared in its own SKILL.md frontmatter)
-			// is swept without anything extra being recorded.
+			// was written into hide.yaml by "init" itself, no manual entry needed.
 			await init('oss-contribution', dir, {});
 			await fs.mkdir(path.join(dir, '.codegraph'), { recursive: true });
 			await fs.writeFile(path.join(dir, '.codegraph', 'index.db'), 'fake-index', 'utf8');
 
 			await hide(dir);
 			assert.equal(existsSync(path.join(dir, '.codegraph')), false);
-			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'codegraph__.codegraph', 'index.db')), true);
+			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'custom__.codegraph', 'index.db')), true);
 
 			await unhide(dir);
 			assert.equal(existsSync(path.join(dir, '.codegraph', 'index.db')), true);
@@ -789,7 +755,7 @@ describe('hide / unhide', () => {
 		}
 	});
 
-	test('hide sweeps a recorded external tool\'s extra folder too, resolved from its catalog entry', async () => {
+	test('sync re-seeds hide.yaml from a recorded external tool\'s catalog entry, and hide sweeps it up', async () => {
 		const dir = tmpDir();
 		try {
 			await init('oss-contribution', dir, {});
@@ -799,10 +765,15 @@ describe('hide / unhide', () => {
 			let workspaceYaml = await fs.readFile(workspacePath, 'utf8');
 			workspaceYaml = workspaceYaml.replace('external:\n  []', 'external:\n  - impeccable');
 			await fs.writeFile(workspacePath, workspaceYaml, 'utf8');
+			// installExternalTool never ran for "impeccable" here — workspace.yaml
+			// was edited by hand — so hide.yaml doesn't know about .impeccable/
+			// yet; sync re-derives it from EXTERNAL_TOOLS' `creates:` for every
+			// name workspace.yaml currently records.
+			await sync(dir);
 
 			await hide(dir);
 			assert.equal(existsSync(path.join(dir, '.impeccable')), false);
-			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'impeccable__.impeccable', 'config.json')), true);
+			assert.equal(existsSync(path.join(hiddenDir(dir), 'extra', 'custom__.impeccable', 'config.json')), true);
 
 			await unhide(dir);
 			assert.equal(existsSync(path.join(dir, '.impeccable', 'config.json')), true);
@@ -811,10 +782,10 @@ describe('hide / unhide', () => {
 		}
 	});
 
-	test('hide leaves a folder alone when nothing in workspace.yaml is recorded as creating it', async () => {
-		// Scoped to what claude-workspace itself installed: a tool set up by
-		// hand, bypassing claude-workspace entirely, is out of scope by design
-		// — nothing recorded it, so hide has no name to look its paths up under.
+	test('hide leaves a folder alone when nothing recorded it into hide.yaml', async () => {
+		// Scoped to what's actually listed in hide.yaml: a tool set up by hand,
+		// bypassing claude-workspace entirely (never installed, never synced),
+		// is out of scope by design — nothing ever wrote its path there.
 		const dir = tmpDir();
 		try {
 			await init('oss-contribution', dir, {});
@@ -875,10 +846,11 @@ describe('hide / unhide', () => {
 		}
 	});
 
-	test('missing hide.yaml is fine — hide behaves exactly as without one', async () => {
+	test('missing hide.yaml file reads as an empty list', async () => {
 		const dir = tmpDir();
 		try {
 			await init('oss-contribution', dir, {});
+			await fs.rm(projectHideConfigPath(dir), { force: true });
 			assert.deepEqual(await readHideConfig(dir), []);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });

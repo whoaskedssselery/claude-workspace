@@ -88,13 +88,13 @@ export function fetchLatestVersion({ timeout = 2500, url = 'https://registry.npm
  * the tool is actually installed (still its own steps, never a skill copy).
  *
  * `creates`: project-root paths (files or folders) this tool's own installer
- * is known to add *besides* .claude/skills/ — "hide" moves these into its
- * stash too, and "unhide" puts them back, same as everything else. Declared
- * right here, next to the entry it belongs to, rather than in a separate
- * list elsewhere that's easy to forget to update when a new tool is added.
- * Only swept for a tool "hide" finds actually recorded in this project's
- * workspace.yaml (installed through claude-workspace itself) — see
- * resolveCreatedPaths below. Best-effort: an installer that writes
+ * is known to add *besides* .claude/skills/ — recorded into the project's
+ * own .claude-workspace/hide.yaml the moment the tool is installed (see
+ * resolveCreatedPaths below and recordHideConfigPaths in manifest.js), so
+ * "hide" later moves these into its stash too, and "unhide" puts them back,
+ * same as everything else. Declared right here, next to the entry it
+ * belongs to, rather than in a separate list elsewhere that's easy to forget
+ * to update when a new tool is added. Best-effort: an installer that writes
  * somewhere undocumented/unpredictable (ui-ux-pro-max here) simply isn't
  * listed, and hide won't know to touch it.
  */
@@ -466,12 +466,18 @@ export function projectPresetsDir(targetDir) {
 }
 
 /**
- * A project's own list of extra paths for "hide" to sweep up, on top of
- * whatever it already infers from workspace.yaml (see resolveCreatedPaths)
- * — for anything hide has no other way to know about: a tool set up by
- * hand, a personal note, a local file that just shouldn't be visible during
- * a screen-share. Committed like a custom preset, so the whole team gets
- * the same hide behavior after a clone.
+ * A project's own, single list of paths for "hide" to sweep up — the whole
+ * source "hide" consults, no separate special-casing for .claude/skills/,
+ * workspace.yaml or CLAUDE.md's generated block anywhere else. "init"
+ * seeds it with `.claude` and `CLAUDE.md` themselves (which is why those
+ * don't need their own entries), plus whatever a just-installed name's own
+ * `creates:` declares (see resolveCreatedPaths below and
+ * recordHideConfigPaths in manifest.js) — "add"/"sync" keep it current the
+ * same way. Add entries by hand for anything claude-workspace has no other
+ * way to know about — a tool set up by hand, a personal note, a local file
+ * that just shouldn't be visible during a screen-share. Committed like a
+ * custom preset, so the whole team gets the same hide behavior after a
+ * clone.
  */
 export function projectHideConfigPath(targetDir) {
 	return path.join(targetDir, '.claude-workspace', 'hide.yaml');
@@ -573,12 +579,15 @@ export function extractCreates(skillMd) {
 
 /**
  * The project-root paths (files or folders, besides .claude/skills/ itself)
- * a given installed name is known to add — used by "hide" to sweep them up
- * too. Checks, in order: an external tool's own `creates` (catalog.js), a
- * REMOTE_SKILLS catalog entry's `creates`, or — for a core/format skill,
- * which this package vendors — a `creates:` list declared right in its own
- * SKILL.md frontmatter, so a new core skill documents its own footprint
- * instead of needing a change somewhere else too.
+ * a given name is known to add — resolved once, right after that name is
+ * installed, so its extra paths can be written straight into the project's
+ * hide.yaml (see recordHideConfigPaths in manifest.js) instead of "hide"
+ * having to re-derive them from workspace.yaml on every run. Checks, in
+ * order: an external tool's own `creates` (catalog.js), a REMOTE_SKILLS
+ * catalog entry's `creates`, or — for a core/format skill, which this
+ * package vendors — a `creates:` list declared right in its own SKILL.md
+ * frontmatter, so a new core skill documents its own footprint instead of
+ * needing a change somewhere else too.
  */
 export async function resolveCreatedPaths(name) {
 	if (EXTERNAL_TOOLS[name]) return EXTERNAL_TOOLS[name].creates ?? [];

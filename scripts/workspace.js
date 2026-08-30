@@ -3,7 +3,7 @@
 // CLI entrypoint: argv parsing and --help text only. Every command's actual
 // behavior lives in scripts/lib/ — see:
 //   lib/catalog.js    what this package ships (presets, skills, external tools)
-//   lib/manifest.js   a project's installed workspace (.claude/workspace.yaml, CLAUDE.md, .gitignore)
+//   lib/manifest.js   a project's installed workspace (.claude/workspace.yaml, CLAUDE.md, hide.yaml)
 //   lib/remote.js     fetching a skill from an arbitrary repo ("add <url>")
 //   lib/pm.js         package-manager detection for "update"
 //   lib/commands.js   the command implementations, built on the four above
@@ -110,28 +110,33 @@ Commands:
 
   doctor          Reports whether declared skills are actually installed,
                   whether their content matches this package's current
-                  version (or has drifted — run sync), whether the recorded
-                  toolkit version matches what's running, and whether
-                  CLAUDE.md / the .gitignore block are in place.
+                  version (or has drifted — run sync), and whether the
+                  recorded toolkit version matches what's running.
 
-  hide            Temporarily moves everything claude-workspace put into the
-                  project — .claude/skills/, .claude/workspace.yaml, the
-                  generated CLAUDE.md block, each currently-installed
-                  skill/tool's own declared extra paths (see "creates:" in
-                  catalog.js / a skill's own SKILL.md frontmatter), and
-                  anything listed in .claude-workspace/hide.yaml — into a
-                  stash OUTSIDE the project (~/.claude-workspace/hidden/),
-                  so nothing is left in the project tree and it looks like
-                  it did before "init" ever ran. Doesn't touch .gitignore.
+  hide            Temporarily moves everything listed in the project's own
+                  .claude-workspace/hide.yaml into a stash OUTSIDE the
+                  project (~/.claude-workspace/hidden/), so nothing is left
+                  in the project tree and it looks like it did before "init"
+                  ever ran. Nothing claude-workspace adds is gitignored —
+                  run "hide" right before a commit instead, and none of it
+                  ends up in that commit.
 
-                  .claude-workspace/hide.yaml lets you list extra files or
-                  folders (relative to the project root) to sweep up too —
-                  anything hide has no other way to know about, e.g.:
+                  .claude-workspace/hide.yaml is a plain list of project-root
+                  paths to sweep up — the only thing "hide" consults, no
+                  special-casing for .claude/skills/, workspace.yaml or
+                  CLAUDE.md's generated block anywhere else. "init" seeds it
+                  with ".claude" and "CLAUDE.md" themselves; "init"/"add"/
+                  "sync" also add whatever a just-installed skill/tool is
+                  known to create (impeccable's .impeccable/, codegraph's
+                  .codegraph/, ...) — add your own entries by hand for
+                  anything else, e.g.:
                     paths:
+                      - .claude
+                      - CLAUDE.md
                       - .env.local
                       - notes/
-                  Optional; committed like a custom preset, so the whole
-                  team gets the same hide behavior after a clone.
+                  Committed like a custom preset, so the whole team gets the
+                  same hide behavior after a clone.
 
   unhide          Reverses "hide": restores the exact pre-hide snapshot and
                   removes the stash. Not a merge — whatever changed while
@@ -343,7 +348,6 @@ export {
 } from './lib/catalog.js';
 
 export {
-	ensureGitignore,
 	requireWorkspace,
 	writeWorkspaceManifest,
 	writeClaudeMd,
@@ -355,8 +359,7 @@ export {
 	hideWorkspace,
 	unhideWorkspace,
 	readHideConfig,
-	GITIGNORE_MARKER_START,
-	GITIGNORE_MARKER_END,
+	recordHideConfigPaths,
 } from './lib/manifest.js';
 
 export {

@@ -33,9 +33,9 @@ import {
 	truncate,
 	parseSimpleYaml,
 	packageVersion,
+	resolveCreatedPaths,
 } from './catalog.js';
 import {
-	ensureGitignore,
 	requireWorkspace,
 	writeWorkspaceManifest,
 	writeClaudeMd,
@@ -43,7 +43,7 @@ import {
 	checkSkillStatus,
 	hideWorkspace,
 	unhideWorkspace,
-	GITIGNORE_MARKER_START,
+	recordHideConfigPaths,
 } from './manifest.js';
 import {
 	looksLikeSkillSource,
@@ -56,6 +56,23 @@ import {
 import { PACKAGE_MANAGER_UPDATE_COMMANDS, detectPackageManager, isEphemeralRun } from './pm.js';
 
 const __filename = fileURLToPath(import.meta.url);
+
+/**
+ * Resolves and records the extra project-root paths (`creates:`) that each
+ * just-installed name is known to add, into this project's own
+ * .claude-workspace/hide.yaml — the one moment claude-workspace actually
+ * knows what a name just added, so "hide" doesn't have to re-derive it from
+ * workspace.yaml later (see resolveCreatedPaths in catalog.js,
+ * recordHideConfigPaths in manifest.js). Always includes `.claude` and
+ * `CLAUDE.md` themselves — hide.yaml is the only thing "hide" consults, so
+ * those two defaults are what cover .claude/skills/, workspace.yaml and the
+ * generated CLAUDE.md block, instead of "hide" special-casing them.
+ */
+async function seedHideConfig(targetDir, names) {
+	const paths = ['.claude', 'CLAUDE.md'];
+	for (const name of names) paths.push(...(await resolveCreatedPaths(name)));
+	await recordHideConfigPaths(targetDir, paths);
+}
 
 /**
  * Does the actual install work for an already-resolved preset object —
@@ -158,14 +175,13 @@ export async function installPreset(preset, presetName, targetDir, { withExterna
 		{ force }
 	);
 
-	await ensureGitignore(targetDir);
+	await seedHideConfig(targetDir, [...installedCore, ...installedSkills, ...installedExternal, ...installedRemote.map((r) => r.name)]);
 
 	console.log(`\nDone.`);
 	console.log(`  .claude/skills/  (${installedCore.length + installedSkills.length + installedRemote.length} skill file(s))`);
 	console.log(`  external tools installed: ${installedExternal.length ? installedExternal.join(', ') : 'none'}`);
 	console.log(`  .claude/workspace.yaml`);
-	console.log(`  CLAUDE.md (${claudeMdResult})`);
-	console.log(`  .gitignore  (.claude/settings.local.json, .DS_Store)\n`);
+	console.log(`  CLAUDE.md (${claudeMdResult})\n`);
 }
 
 /** Loads a preset by name (built-in, project-local or saved globally) and installs it. */
@@ -260,7 +276,7 @@ export async function sync(targetDir) {
 		{ force: false }
 	);
 
-	await ensureGitignore(targetDir);
+	await seedHideConfig(targetDir, [...(manifest.core ?? []), ...remainingSkills, ...(manifest.external ?? []), ...remote.map((r) => r.name)]);
 
 	console.log(`\nDone. Refreshed ${updated} skill(s). CLAUDE.md ${claudeMdResult}.`);
 	const external = manifest.external ?? [];
@@ -277,7 +293,7 @@ export async function sync(targetDir) {
  * are actually installed, whether their content matches what this version
  * of the package ships (vs. having drifted, e.g. after a package update),
  * whether the recorded toolkit version matches what's actually running, and
- * whether CLAUDE.md / the .gitignore block are in place.
+ * whether CLAUDE.md is in place.
  */
 export async function doctor(targetDir) {
 	const workspacePath = requireWorkspace(targetDir);
@@ -317,38 +333,30 @@ export async function doctor(targetDir) {
 	const claudeMdOk = existsSync(path.join(targetDir, 'CLAUDE.md'));
 	console.log(`\n  CLAUDE.md          ${claudeMdOk ? 'present' : 'MISSING'}`);
 
-	const gitignorePath = path.join(targetDir, '.gitignore');
-	const gitignoreOk = existsSync(gitignorePath) && (await fs.readFile(gitignorePath, 'utf8')).includes(GITIGNORE_MARKER_START);
-	console.log(`  .gitignore block   ${gitignoreOk ? 'present' : 'MISSING — run sync'}`);
-
 	console.log('\nRun "claude-workspace sync" to refresh anything marked outdated or missing.\n');
 }
 
 /**
- * Temporarily removes everything claude-workspace put into the project —
- * .claude/skills/, .claude/workspace.yaml, the generated CLAUDE.md block,
- * and any known external tool folders (e.g. impeccable's .impeccable/) —
- * stashing it OUTSIDE the project (see hiddenDir in manifest.js) so nothing
- * claude-workspace-related is left sitting in the project tree, and
- * "unhide" can put it all back exactly as it was. Useful for a
- * screen-share, a clean diff, or handing the project to someone who
- * shouldn't see it, without losing anything.
+ * Temporarily removes everything listed in the project's own
+ * .claude-workspace/hide.yaml (.claude/, CLAUDE.md, and any skill/tool's own
+ * extra paths by default — see seedHideConfig above) — stashing it OUTSIDE
+ * the project (see hiddenDir in manifest.js) so nothing is left sitting in
+ * the project tree, and "unhide" can put it all back exactly as it was.
+ * Useful for a screen-share, a clean diff, or right before a commit so none
+ * of it ends up in that commit.
  */
 export async function hide(targetDir) {
-	const { hiddenDir: dir, hadSkills, claudeMdTouched, extraDirs } = await hideWorkspace(targetDir);
+	const { hiddenDir: dir, movedPaths } = await hideWorkspace(targetDir);
 	console.log(`\nHidden.`);
-	console.log(`  .claude/skills/         ${hadSkills ? 'moved' : '(was already empty)'}`);
-	console.log(`  .claude/workspace.yaml  moved`);
-	console.log(`  CLAUDE.md               ${claudeMdTouched ? 'generated block removed' : 'unchanged'}`);
-	if (extraDirs.length) console.log(`  also moved: ${extraDirs.join(', ')}`);
+	console.log(movedPaths.length ? `  moved: ${movedPaths.join(', ')}` : `  nothing to move — hide.yaml lists nothing that exists here`);
 	console.log(`  stashed in ${dir}`);
 	console.log(`\nRun "claude-workspace unhide" to bring it all back exactly as it was.\n`);
 }
 
 /** Reverses "hide" — see hideWorkspace/unhideWorkspace in manifest.js. */
 export async function unhide(targetDir) {
-	const { extraDirs } = await unhideWorkspace(targetDir);
-	console.log(`\nRestored. .claude/skills/, .claude/workspace.yaml, CLAUDE.md${extraDirs.length ? ` and ${extraDirs.join(', ')}` : ''} are back exactly as they were before "hide".\n`);
+	const { movedPaths } = await unhideWorkspace(targetDir);
+	console.log(`\nRestored${movedPaths.length ? `: ${movedPaths.join(', ')}` : ''} — back exactly as they were before "hide".\n`);
 }
 
 /**
@@ -405,6 +413,7 @@ export async function addSkills(targetDir, names, { global = false, skill = null
 	const remoteNames = new Set(remote.map((r) => r.name));
 	const skillsDestDir = path.join(targetDir, '.claude', 'skills');
 	await fs.mkdir(skillsDestDir, { recursive: true });
+	const justAdded = [];
 
 	for (const name of names) {
 		if (looksLikeSkillSource(name)) {
@@ -421,6 +430,7 @@ export async function addSkills(targetDir, names, { global = false, skill = null
 				if (remoteNames.has(addedName)) continue;
 				remote.push({ name: addedName, source: name });
 				remoteNames.add(addedName);
+				justAdded.push(addedName);
 			}
 			continue;
 		}
@@ -431,11 +441,15 @@ export async function addSkills(targetDir, names, { global = false, skill = null
 		const tool = EXTERNAL_TOOLS[name];
 		if (tool) {
 			const ok = await installExternalTool(name, tool, targetDir);
-			if (ok) external.add(name);
+			if (ok) {
+				external.add(name);
+				justAdded.push(name);
+			}
 			continue;
 		}
 		if (await copySkill('formats', name, skillsDestDir)) {
 			skills.add(name);
+			justAdded.push(name);
 			continue;
 		}
 		const catalogEntry = REMOTE_SKILLS[name];
@@ -449,6 +463,7 @@ export async function addSkills(targetDir, names, { global = false, skill = null
 				if (remoteNames.has(addedName)) continue;
 				remote.push({ name: addedName, source: catalogEntry.source });
 				remoteNames.add(addedName);
+				justAdded.push(addedName);
 			}
 			continue;
 		}
@@ -461,7 +476,7 @@ export async function addSkills(targetDir, names, { global = false, skill = null
 	}
 
 	await writeWorkspaceManifest(targetDir, manifest.preset ?? 'custom', core, [...skills], [...external], remote);
-	await ensureGitignore(targetDir);
+	await seedHideConfig(targetDir, justAdded);
 	console.log(
 		`\nAdded. .claude/skills/ now has ${core.length + skills.size + remote.length} skill(s); external: ${[...external].join(', ') || 'none'}; remote: ${remote.map((r) => r.name).join(', ') || 'none'}.\n`
 	);
