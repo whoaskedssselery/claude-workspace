@@ -1,6 +1,6 @@
 {
 	"name": "claude-workspace",
-	"version": "0.6.6",
+	"version": "0.6.7",
 	"description": "Opinionated workspace manager for Claude Code. Installs a preset of skills, a workspace manifest and a CLAUDE.md into any project with one command.",
 	"keywords": [
 		"claude",
