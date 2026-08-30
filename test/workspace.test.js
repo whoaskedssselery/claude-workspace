@@ -885,4 +885,28 @@ describe('hide / unhide', () => {
 			rmSync(dir, { recursive: true, force: true });
 		}
 	});
+
+	test('doctor/sync tell a hidden project apart from one that was never init-ed', async () => {
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			await hide(dir);
+
+			// While hidden, .claude/workspace.yaml is missing for a completely
+			// different reason than "never ran init" — the error should say so.
+			await assert.rejects(() => doctor(dir), /currently hidden.*unhide/);
+			await assert.rejects(() => sync(dir), /currently hidden.*unhide/);
+
+			// A project that genuinely was never init-ed still gets the original
+			// "run init first" message, not the hidden one.
+			const neverInit = tmpDir();
+			try {
+				await assert.rejects(() => doctor(neverInit), /run "init" first/);
+			} finally {
+				rmSync(neverInit, { recursive: true, force: true });
+			}
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
 });

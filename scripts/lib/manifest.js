@@ -29,9 +29,19 @@ import {
 	projectHideConfigPath,
 } from './catalog.js';
 
+/**
+ * `.claude/workspace.yaml` missing has two very different causes: this
+ * project was never `init`-ed, or it was and is simply hidden right now
+ * (see hideWorkspace below — .claude/ moves out entirely while hidden).
+ * Checking hiddenDir first tells the two apart instead of always pointing
+ * at "init", which would be actively wrong — and confusing — mid-hide.
+ */
 export function requireWorkspace(targetDir) {
 	const workspacePath = path.join(targetDir, '.claude', 'workspace.yaml');
 	if (!existsSync(workspacePath)) {
+		if (existsSync(hiddenDir(targetDir))) {
+			throw new Error(`This project is currently hidden — run "claude-workspace unhide" first.`);
+		}
 		throw new Error(`No .claude/workspace.yaml found in ${targetDir} — run "init" first.`);
 	}
 	return workspacePath;

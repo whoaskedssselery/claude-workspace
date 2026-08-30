@@ -201,10 +201,7 @@ export async function init(presetName, targetDir, opts = {}) {
  * command).
  */
 export async function sync(targetDir) {
-	const workspacePath = path.join(targetDir, '.claude', 'workspace.yaml');
-	if (!existsSync(workspacePath)) {
-		throw new Error(`No .claude/workspace.yaml found in ${targetDir} — run "init" first.`);
-	}
+	const workspacePath = requireWorkspace(targetDir);
 	const manifest = parseSimpleYaml(await fs.readFile(workspacePath, 'utf8'));
 	const skillsDestDir = path.join(targetDir, '.claude', 'skills');
 	await fs.mkdir(skillsDestDir, { recursive: true });
