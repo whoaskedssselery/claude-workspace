@@ -436,11 +436,6 @@ export function renderYamlList(items) {
 	return items.map((item) => `  - ${item}`).join('\n');
 }
 
-export function renderMarkdownList(items) {
-	if (!items.length) return '_none installed_';
-	return items.map((item) => `- \`${item}\``).join('\n');
-}
-
 export async function listPresetNames(dir) {
 	if (!existsSync(dir)) return [];
 	return (await fs.readdir(dir)).filter((f) => f.endsWith('.yaml')).map((f) => f.replace(/\.yaml$/, ''));

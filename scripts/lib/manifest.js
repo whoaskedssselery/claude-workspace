@@ -14,11 +14,12 @@ import { GLOBAL_DIR } from './i18n.js';
 import {
 	TEMPLATES_DIR,
 	SKILLS_DIR,
+	EXTERNAL_TOOLS,
 	resolveCreatedPaths,
+	extractDescription,
 	parseSimpleYaml,
 	packageVersion,
 	renderYamlList,
-	renderMarkdownList,
 	projectHideConfigPath,
 } from './catalog.js';
 
@@ -81,6 +82,39 @@ const CLAUDE_MD_MARKER_START = '<!-- claude-workspace:start -->';
 const CLAUDE_MD_MARKER_END = '<!-- claude-workspace:end -->';
 
 /**
+ * A skill's one-line description is the whole reason it gets invoked at
+ * all — Claude Code decides to consult a skill by matching the task at
+ * hand against that description, so surfacing it directly in CLAUDE.md
+ * (rather than just the bare name) means the "when to use this" signal is
+ * sitting in context even before anything decides to read the skill file
+ * itself. Reads from wherever the skill actually landed
+ * (targetDir/.claude/skills/<name>/SKILL.md) rather than this package's own
+ * catalog, so it works uniformly for core, format, catalog and `add <url>`
+ * skills alike — whatever is really installed, not just what claude-workspace
+ * shipped. External tools have no SKILL.md to read; fall back to their URL.
+ */
+async function describeInstalledSkill(skillsDestDir, name) {
+	const file = path.join(skillsDestDir, name, 'SKILL.md');
+	if (existsSync(file)) {
+		const description = extractDescription(await fs.readFile(file, 'utf8'));
+		if (description) return description;
+	}
+	if (EXTERNAL_TOOLS[name]) return `Separate tool, own installer — ${EXTERNAL_TOOLS[name].url}`;
+	return '';
+}
+
+export async function renderSkillList(names, skillsDestDir) {
+	if (!names.length) return '_none installed_';
+	const lines = await Promise.all(
+		names.map(async (name) => {
+			const description = await describeInstalledSkill(skillsDestDir, name);
+			return description ? `- **${name}** — ${description}` : `- **${name}**`;
+		})
+	);
+	return lines.join('\n');
+}
+
+/**
  * Writes (or updates in place) the claude-workspace-generated section of
  * CLAUDE.md, wrapped in HTML-comment markers so it can be told apart from
  * anything a team member added by hand around it — mirrors the .gitignore
@@ -95,11 +129,12 @@ const CLAUDE_MD_MARKER_END = '<!-- claude-workspace:end -->';
  */
 export async function writeClaudeMd(targetDir, presetName, core, skills, { force = false } = {}) {
 	const claudeMdPath = path.join(targetDir, 'CLAUDE.md');
+	const skillsDestDir = path.join(targetDir, '.claude', 'skills');
 	const claudeTemplate = await fs.readFile(path.join(TEMPLATES_DIR, 'CLAUDE.template.md'), 'utf8');
 	const rendered = claudeTemplate
 		.replace('{{PRESET}}', presetName)
-		.replace('{{CORE_LIST}}', renderMarkdownList(core))
-		.replace('{{SKILLS_LIST}}', renderMarkdownList(skills));
+		.replace('{{CORE_LIST}}', await renderSkillList(core, skillsDestDir))
+		.replace('{{SKILLS_LIST}}', await renderSkillList(skills, skillsDestDir));
 
 	if (!existsSync(claudeMdPath)) {
 		await fs.writeFile(claudeMdPath, rendered, 'utf8');

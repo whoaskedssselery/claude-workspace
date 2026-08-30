@@ -317,7 +317,6 @@ if (isEntryPoint()) {
 export {
 	parseSimpleYaml,
 	renderYamlList,
-	renderMarkdownList,
 	editDistance,
 	suggestName,
 	isSafeName,
@@ -348,6 +347,7 @@ export {
 	requireWorkspace,
 	writeWorkspaceManifest,
 	writeClaudeMd,
+	renderSkillList,
 	encodeRemoteList,
 	decodeRemoteList,
 	checkSkillStatus,

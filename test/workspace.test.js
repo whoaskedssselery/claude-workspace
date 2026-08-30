@@ -15,7 +15,7 @@ process.env.CLAUDE_WORKSPACE_HOME = fakeHome;
 const {
 	parseSimpleYaml,
 	renderYamlList,
-	renderMarkdownList,
+	renderSkillList,
 	editDistance,
 	suggestName,
 	extractDescription,
@@ -85,7 +85,7 @@ skills: []
 	});
 });
 
-describe('renderYamlList / renderMarkdownList', () => {
+describe('renderYamlList', () => {
 	test('renders an empty list as inline []', () => {
 		assert.equal(renderYamlList([]), '  []');
 	});
@@ -93,13 +93,35 @@ describe('renderYamlList / renderMarkdownList', () => {
 	test('renders a non-empty list as dashed items', () => {
 		assert.equal(renderYamlList(['a', 'b']), '  - a\n  - b');
 	});
+});
 
-	test('markdown list falls back to a placeholder when empty', () => {
-		assert.equal(renderMarkdownList([]), '_none installed_');
+describe('renderSkillList', () => {
+	test('falls back to a placeholder when empty', async () => {
+		assert.equal(await renderSkillList([], '/does/not/exist'), '_none installed_');
 	});
 
-	test('markdown list renders items as inline code', () => {
-		assert.equal(renderMarkdownList(['a', 'b']), '- `a`\n- `b`');
+	test('renders a bare name (no bold, no description) when no SKILL.md is found and it is not a known external tool', async () => {
+		assert.equal(await renderSkillList(['not-installed'], '/does/not/exist'), '- **not-installed**');
+	});
+
+	test('reads the description from the skill actually installed at skillsDestDir', async () => {
+		const dir = tmpDir();
+		try {
+			await fs.mkdir(path.join(dir, 'demo-skill'), { recursive: true });
+			await fs.writeFile(
+				path.join(dir, 'demo-skill', 'SKILL.md'),
+				'---\nname: demo-skill\ndescription: Does the demo thing.\n---\n\n# Demo\n',
+				'utf8'
+			);
+			assert.equal(await renderSkillList(['demo-skill'], dir), '- **demo-skill** — Does the demo thing.');
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('falls back to the URL for a known external tool with no SKILL.md', async () => {
+		const line = await renderSkillList(['impeccable'], '/does/not/exist');
+		assert.match(line, /^- \*\*impeccable\*\* — Separate tool, own installer — https:\/\/github\.com\/pbakaus\/impeccable$/);
 	});
 });
 

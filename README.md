@@ -40,9 +40,13 @@ claude-workspace init <preset>
 
 ### What gets created
 
-- `.claude/skills/` — the preset's skills, applied automatically, no manual invocation needed
+- `.claude/skills/` — the preset's skills, ready for Claude Code to consult when a task matches one
 - `.claude/workspace.yaml` — a manifest of what's installed, used by `sync`/`doctor`/`add`/`remove`
-- `CLAUDE.md` — a generated project entry point (left alone if one already exists)
+- `CLAUDE.md` — a generated project entry point (left alone if one already exists) that lists every
+  installed skill next to its one-line description, so "when to use this" is visible in context
+  even before anything decides to open the skill file — and tells Claude explicitly to combine
+  every applicable skill on a given task instead of stopping at the first match, which is the most
+  common way multi-skill setups end up under-used
 - a small marked block in `.gitignore` for the one thing that's genuinely personal:
   `.claude/settings.local.json` and `.DS_Store`
 
