@@ -38,6 +38,10 @@ Already know what you want (CI, automation, repeat setup)? Skip the wizard by pa
 claude-workspace init <preset>
 ```
 
+`init` is for a fresh setup, once — it refuses to run on a project that's already initialized (use
+`add`/`remove`/`sync` instead) or currently hidden (run [`unhide`](#temporarily-hiding-a-workspace)
+first). The wizard has the same guard.
+
 ### What gets created
 
 - `.claude/skills/` — the preset's skills, ready for Claude Code to consult when a task matches one

@@ -47,6 +47,11 @@ Commands:
                   workspace manifest and CLAUDE.md directly from flags
                   (targetDir defaults to the current directory).
 
+                  Refuses to run on a project that's already initialized
+                  (use "add"/"remove"/"sync" instead) or currently hidden
+                  (run "unhide" first) — "init" is for a fresh setup, once,
+                  not a way to re-install over what's already there.
+
                   --with=<name,name,...>  also install these skills/tools,
                     from ANY domain (skills/{frontend,design,backend,...}) or
                     external tool (Impeccable, Superpowers, Taste,

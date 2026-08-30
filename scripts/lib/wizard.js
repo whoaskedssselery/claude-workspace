@@ -21,6 +21,7 @@ import {
 	projectPresetsDir,
 	looksLikeSkillSource,
 	parseSimpleYaml,
+	hiddenDir,
 } from '../workspace.js';
 
 /** Format-variant skills that only make sense with specific presets — shown only then. */
@@ -172,6 +173,15 @@ export async function runWizard(targetDir) {
 	try {
 		lang = await resolveLanguage();
 		console.log(`\n${dim(t(lang, 'wizardTagline'))}`);
+
+		// A hidden project has no .claude/workspace.yaml right now (it's in the
+		// stash) — without this check the existence test just below would read
+		// that as "never initialized" and walk straight into a fresh install,
+		// colliding with what "unhide" expects to restore later.
+		if (existsSync(hiddenDir(targetDir))) {
+			console.log(`\n${dim(t(lang, 'currentlyHidden'))}\n`);
+			return;
+		}
 
 		const existingWorkspacePath = path.join(targetDir, '.claude', 'workspace.yaml');
 		if (existsSync(existingWorkspacePath)) {

@@ -84,6 +84,7 @@ const STRINGS = {
 		alreadyInitializedYes: 'Yes → re-run (re-copies skills, may overwrite local edits to them)',
 		alreadyInitializedNo: 'No → use "add"/"remove"/"sync"/"doctor" instead',
 		alreadyInitializedHint: 'Nothing changed. Try: claude-workspace doctor / add <name> / sync',
+		currentlyHidden: 'This project is currently hidden — run "claude-workspace unhide" first.',
 	},
 	ru: {
 		wizardTitle: 'Claude Workspace',
@@ -134,6 +135,7 @@ const STRINGS = {
 		alreadyInitializedYes: 'Да → заново (перекопирует скиллы, может затереть локальные правки в них)',
 		alreadyInitializedNo: 'Нет → используй "add"/"remove"/"sync"/"doctor"',
 		alreadyInitializedHint: 'Ничего не изменено. Попробуй: claude-workspace doctor / add <name> / sync',
+		currentlyHidden: 'Этот проект сейчас спрятан — сначала запусти "claude-workspace unhide".',
 	},
 };
 

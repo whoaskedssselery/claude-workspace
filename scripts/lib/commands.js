@@ -41,6 +41,7 @@ import {
 	writeClaudeMd,
 	decodeRemoteList,
 	checkSkillStatus,
+	hiddenDir,
 	hideWorkspace,
 	unhideWorkspace,
 	recordHideConfigPaths,
@@ -188,6 +189,23 @@ export async function installPreset(preset, presetName, targetDir, { withExterna
 /** Loads a preset by name (built-in, project-local or saved globally) and installs it. */
 export async function init(presetName, targetDir, opts = {}) {
 	const preset = await loadPreset(presetName, targetDir);
+
+	// A hidden project has no .claude/workspace.yaml right now (it's in the
+	// stash) — without this check, "init" would read that as "never
+	// initialized" and happily create a brand new .claude/, which then
+	// collides with the one "unhide" tries to restore later. And a project
+	// that's already initialized, hidden or not, should be changed with
+	// "add"/"remove"/"sync", not silently re-installed out from under
+	// itself — "init" is for a fresh setup, once.
+	if (existsSync(hiddenDir(targetDir))) {
+		throw new Error(`This project is currently hidden — run "claude-workspace unhide" first.`);
+	}
+	if (existsSync(path.join(targetDir, '.claude', 'workspace.yaml'))) {
+		throw new Error(
+			`${targetDir} is already initialized — "init" won't overwrite it. Use "add"/"remove" to change what's installed, "sync" to refresh it, or remove .claude/ and CLAUDE.md yourself first to start over.`
+		);
+	}
+
 	return installPreset(preset, presetName, targetDir, opts);
 }
 

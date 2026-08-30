@@ -613,6 +613,36 @@ describe('init', () => {
 			rmSync(dir, { recursive: true, force: true });
 		}
 	});
+
+	test('refuses to run again on an already-initialized project', async () => {
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			await assert.rejects(() => init('debug', dir, {}), /already initialized/);
+			// Confirms it's a hard refusal, not a partial/silent no-op: the
+			// original preset is still the one on record.
+			const workspaceYaml = await fs.readFile(path.join(dir, '.claude', 'workspace.yaml'), 'utf8');
+			assert.ok(workspaceYaml.includes('preset: oss-contribution'));
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('refuses to run on a hidden project, even though .claude/workspace.yaml looks absent', async () => {
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			await hide(dir);
+			// Without the hidden check, this would read as "never initialized"
+			// (workspace.yaml really is gone — it's in the stash) and happily
+			// create a brand new .claude/, colliding with what "unhide" expects
+			// to restore later.
+			await assert.rejects(() => init('oss-contribution', dir, {}), /currently hidden.*unhide/);
+			assert.equal(existsSync(path.join(dir, '.claude')), false);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
 });
 
 describe('sync', () => {
