@@ -90,100 +90,121 @@ export async function installPreset(preset, presetName, targetDir, { withExterna
 	console.log(`\nInstalling preset "${presetName}" into ${targetDir}\n`);
 
 	const installedCore = [];
-	for (const name of preset.core ?? []) {
-		const ok = await copySkill('core', name, skillsDestDir);
-		if (ok) installedCore.push(name);
-		else warn(`core skill "${name}" not found in ${SKILLS_DIR}/core — skipped`);
-	}
-
-	// --with=<names> can name ANY known skill/tool, not just ones the preset
-	// already lists — that's how a generic preset like `learning` picks up a
-	// specific technology (e.g. --with=react-best-practices,api-designer) at
-	// init time instead of needing a dedicated preset per stack.
-	const requestedNames = [...new Set([...(preset.skills ?? []), ...(withNames ?? [])])];
-
 	const installedSkills = [];
 	const installedExternal = [];
 	const installedRemote = [];
-	const remoteNames = new Set();
-	for (const name of requestedNames) {
-		// A preset's skills: list (or --with=) can name a remote source too —
-		// not just this package's own catalog — so a custom preset can bundle
-		// "always pull in this URL" alongside catalog skills.
-		if (looksLikeSkillSource(name)) {
-			if (installedRemote.some((r) => normalizeSkillSource(r.source) === normalizeSkillSource(name))) {
-				warn(`"${name}" was already fetched from an equivalent source — skipped`);
-				continue;
-			}
-			const added = await fetchRemoteSkill(targetDir, name);
-			if (!added.length) {
-				warn(`nothing new appeared in .claude/skills/ from "${name}" — not recorded`);
-				continue;
-			}
-			for (const addedName of added) {
-				installedRemote.push({ name: addedName, source: name });
-				remoteNames.add(addedName);
-			}
-			continue;
+
+	try {
+		for (const name of preset.core ?? []) {
+			const ok = await copySkill('core', name, skillsDestDir);
+			if (ok) installedCore.push(name);
+			else warn(`core skill "${name}" not found in ${SKILLS_DIR}/core — skipped`);
 		}
-		const external = EXTERNAL_TOOLS[name];
-		if (external) {
-			const wanted = withExternal || (withNames?.includes(name) ?? false);
-			if (!wanted) {
-				warn(`"${name}" is a separate tool, not installed automatically. Run with --with=${name} to install it, or by hand:`);
-				warn(`    ${external.manualInstall}`);
+
+		// --with=<names> can name ANY known skill/tool, not just ones the preset
+		// already lists — that's how a generic preset like `learning` picks up a
+		// specific technology (e.g. --with=react-best-practices,api-designer) at
+		// init time instead of needing a dedicated preset per stack.
+		const requestedNames = [...new Set([...(preset.skills ?? []), ...(withNames ?? [])])];
+
+		const remoteNames = new Set();
+		for (const name of requestedNames) {
+			// A preset's skills: list (or --with=) can name a remote source too —
+			// not just this package's own catalog — so a custom preset can bundle
+			// "always pull in this URL" alongside catalog skills.
+			if (looksLikeSkillSource(name)) {
+				if (installedRemote.some((r) => normalizeSkillSource(r.source) === normalizeSkillSource(name))) {
+					warn(`"${name}" was already fetched from an equivalent source — skipped`);
+					continue;
+				}
+				const added = await fetchRemoteSkill(targetDir, name);
+				if (!added.length) {
+					warn(`nothing new appeared in .claude/skills/ from "${name}" — not recorded`);
+					continue;
+				}
+				for (const addedName of added) {
+					installedRemote.push({ name: addedName, source: name });
+					remoteNames.add(addedName);
+				}
 				continue;
 			}
-			const ok = await installExternalTool(name, external, targetDir);
-			if (ok) installedExternal.push(name);
-			continue;
-		}
-		// A format variant (spike, assignment-defend) is still vendored in this
-		// repo, same as core — copied directly rather than fetched.
-		if (await copySkill('formats', name, skillsDestDir)) {
-			installedSkills.push(name);
-			continue;
-		}
-		// Everything else in the catalog (frontend/backend/design/... skills) is
-		// fetched on demand from its author's own repo, pinned to one skill —
-		// see REMOTE_SKILLS in catalog.js and remote.js's fetchRemoteSkill.
-		const catalogEntry = REMOTE_SKILLS[name];
-		if (catalogEntry) {
-			if (remoteNames.has(name)) {
-				warn(`"${name}" was already fetched — skipped`);
+			const external = EXTERNAL_TOOLS[name];
+			if (external) {
+				const wanted = withExternal || (withNames?.includes(name) ?? false);
+				if (!wanted) {
+					warn(`"${name}" is a separate tool, not installed automatically. Run with --with=${name} to install it, or by hand:`);
+					warn(`    ${external.manualInstall}`);
+					continue;
+				}
+				const ok = await installExternalTool(name, external, targetDir);
+				if (ok) installedExternal.push(name);
 				continue;
 			}
-			const added = await fetchRemoteSkill(targetDir, catalogEntry.source, { skill: catalogEntry.skillName });
-			if (!added.length) {
-				warn(`nothing new appeared in .claude/skills/ from "${name}" (${catalogEntry.source}) — not recorded`);
+			// A format variant (spike, assignment-defend) is still vendored in this
+			// repo, same as core — copied directly rather than fetched.
+			if (await copySkill('formats', name, skillsDestDir)) {
+				installedSkills.push(name);
 				continue;
 			}
-			for (const addedName of added) {
-				installedRemote.push({ name: addedName, source: catalogEntry.source });
-				remoteNames.add(addedName);
+			// Everything else in the catalog (frontend/backend/design/... skills) is
+			// fetched on demand from its author's own repo, pinned to one skill —
+			// see REMOTE_SKILLS in catalog.js and remote.js's fetchRemoteSkill.
+			const catalogEntry = REMOTE_SKILLS[name];
+			if (catalogEntry) {
+				if (remoteNames.has(name)) {
+					warn(`"${name}" was already fetched — skipped`);
+					continue;
+				}
+				const added = await fetchRemoteSkill(targetDir, catalogEntry.source, { skill: catalogEntry.skillName });
+				if (!added.length) {
+					warn(`nothing new appeared in .claude/skills/ from "${name}" (${catalogEntry.source}) — not recorded`);
+					continue;
+				}
+				for (const addedName of added) {
+					installedRemote.push({ name: addedName, source: catalogEntry.source });
+					remoteNames.add(addedName);
+				}
+				continue;
 			}
-			continue;
+			const suggestion = suggestName(name, await listKnownNames());
+			warn(`"${name}" isn't a known skill or external tool — skipped` + (suggestion ? ` (did you mean "${suggestion}"?)` : ''));
 		}
-		const suggestion = suggestName(name, await listKnownNames());
-		warn(`"${name}" isn't a known skill or external tool — skipped` + (suggestion ? ` (did you mean "${suggestion}"?)` : ''));
+
+		await writeWorkspaceManifest(targetDir, presetName, installedCore, installedSkills, installedExternal, installedRemote);
+		const claudeMdResult = await writeClaudeMd(
+			targetDir,
+			presetName,
+			installedCore,
+			[...installedSkills, ...installedExternal, ...installedRemote.map((r) => r.name)],
+			{ force }
+		);
+
+		await seedHideConfig(targetDir, [...installedCore, ...installedSkills, ...installedExternal, ...installedRemote.map((r) => r.name)]);
+
+		console.log(`\nDone.`);
+		console.log(`  .claude/skills/  (${installedCore.length + installedSkills.length + installedRemote.length} skill file(s))`);
+		console.log(`  external tools installed: ${installedExternal.length ? installedExternal.join(', ') : 'none'}`);
+		console.log(`  .claude/workspace.yaml`);
+		console.log(`  CLAUDE.md (${claudeMdResult})\n`);
+	} catch (error) {
+		// Something escaped the per-name error handling above (an uncaught
+		// exception, not one of the individually-warned "skipped" cases) — e.g.
+		// copySkill's fs.cp throwing on an unexpected filesystem conflict.
+		// Whatever this call itself already copied/fetched into .claude/skills/
+		// is real on disk but was never recorded in workspace.yaml (that write
+		// hadn't happened yet), which is exactly the half-installed state
+		// "doctor" and .claude/skills/ would otherwise disagree about — so undo
+		// it and surface a clear error instead of leaving it there. This can't
+		// protect against a hard process kill (Ctrl+C/SIGKILL), only against a
+		// rejection surfacing mid-loop.
+		const addedNames = [...installedCore, ...installedSkills, ...installedRemote.map((r) => r.name)];
+		for (const name of addedNames) {
+			await fs.rm(path.join(skillsDestDir, name), { recursive: true, force: true }).catch(() => {});
+		}
+		throw new Error(
+			`Install failed partway through and was rolled back (removed ${addedNames.length} partially-installed skill(s)): ${error.message}`
+		);
 	}
-
-	await writeWorkspaceManifest(targetDir, presetName, installedCore, installedSkills, installedExternal, installedRemote);
-	const claudeMdResult = await writeClaudeMd(
-		targetDir,
-		presetName,
-		installedCore,
-		[...installedSkills, ...installedExternal, ...installedRemote.map((r) => r.name)],
-		{ force }
-	);
-
-	await seedHideConfig(targetDir, [...installedCore, ...installedSkills, ...installedExternal, ...installedRemote.map((r) => r.name)]);
-
-	console.log(`\nDone.`);
-	console.log(`  .claude/skills/  (${installedCore.length + installedSkills.length + installedRemote.length} skill file(s))`);
-	console.log(`  external tools installed: ${installedExternal.length ? installedExternal.join(', ') : 'none'}`);
-	console.log(`  .claude/workspace.yaml`);
-	console.log(`  CLAUDE.md (${claudeMdResult})\n`);
 }
 
 /** Loads a preset by name (built-in, project-local or saved globally) and installs it. */
@@ -431,71 +452,86 @@ export async function addSkills(targetDir, names, { global = false, skill = null
 	await fs.mkdir(skillsDestDir, { recursive: true });
 	const justAdded = [];
 
-	for (const name of names) {
-		if (looksLikeSkillSource(name)) {
-			if (remote.some((r) => normalizeSkillSource(r.source) === normalizeSkillSource(name))) {
-				warn(`"${name}" was already added from an equivalent source — skipped`);
+	try {
+		for (const name of names) {
+			if (looksLikeSkillSource(name)) {
+				if (remote.some((r) => normalizeSkillSource(r.source) === normalizeSkillSource(name))) {
+					warn(`"${name}" was already added from an equivalent source — skipped`);
+					continue;
+				}
+				const added = await fetchRemoteSkill(targetDir, name, { skill });
+				if (!added.length) {
+					warn(`nothing new appeared in .claude/skills/ from "${name}" — not recorded`);
+					continue;
+				}
+				for (const addedName of added) {
+					if (remoteNames.has(addedName)) continue;
+					remote.push({ name: addedName, source: name });
+					remoteNames.add(addedName);
+					justAdded.push(addedName);
+				}
 				continue;
 			}
-			const added = await fetchRemoteSkill(targetDir, name, { skill });
-			if (!added.length) {
-				warn(`nothing new appeared in .claude/skills/ from "${name}" — not recorded`);
+			if (core.includes(name) || skills.has(name) || external.has(name) || remoteNames.has(name)) {
+				warn(`"${name}" is already part of this workspace — skipped`);
 				continue;
 			}
-			for (const addedName of added) {
-				if (remoteNames.has(addedName)) continue;
-				remote.push({ name: addedName, source: name });
-				remoteNames.add(addedName);
-				justAdded.push(addedName);
+			const tool = EXTERNAL_TOOLS[name];
+			if (tool) {
+				const ok = await installExternalTool(name, tool, targetDir);
+				if (ok) {
+					external.add(name);
+					justAdded.push(name);
+				}
+				continue;
 			}
-			continue;
-		}
-		if (core.includes(name) || skills.has(name) || external.has(name) || remoteNames.has(name)) {
-			warn(`"${name}" is already part of this workspace — skipped`);
-			continue;
-		}
-		const tool = EXTERNAL_TOOLS[name];
-		if (tool) {
-			const ok = await installExternalTool(name, tool, targetDir);
-			if (ok) {
-				external.add(name);
+			if (await copySkill('formats', name, skillsDestDir)) {
+				skills.add(name);
 				justAdded.push(name);
-			}
-			continue;
-		}
-		if (await copySkill('formats', name, skillsDestDir)) {
-			skills.add(name);
-			justAdded.push(name);
-			continue;
-		}
-		const catalogEntry = REMOTE_SKILLS[name];
-		if (catalogEntry) {
-			const added = await fetchRemoteSkill(targetDir, catalogEntry.source, { skill: catalogEntry.skillName });
-			if (!added.length) {
-				warn(`nothing new appeared in .claude/skills/ from "${name}" (${catalogEntry.source}) — not recorded`);
 				continue;
 			}
-			for (const addedName of added) {
-				if (remoteNames.has(addedName)) continue;
-				remote.push({ name: addedName, source: catalogEntry.source });
-				remoteNames.add(addedName);
-				justAdded.push(addedName);
+			const catalogEntry = REMOTE_SKILLS[name];
+			if (catalogEntry) {
+				const added = await fetchRemoteSkill(targetDir, catalogEntry.source, { skill: catalogEntry.skillName });
+				if (!added.length) {
+					warn(`nothing new appeared in .claude/skills/ from "${name}" (${catalogEntry.source}) — not recorded`);
+					continue;
+				}
+				for (const addedName of added) {
+					if (remoteNames.has(addedName)) continue;
+					remote.push({ name: addedName, source: catalogEntry.source });
+					remoteNames.add(addedName);
+					justAdded.push(addedName);
+				}
+				continue;
 			}
-			continue;
+			if (isSafeName(name) && existsSync(path.join(SKILLS_DIR, 'core', name, 'SKILL.md'))) {
+				warn(`"${name}" is a core skill, bundled by presets rather than added individually — use "init" with a preset that includes it instead.`);
+				continue;
+			}
+			const suggestion = suggestName(name, await listKnownNames());
+			warn(`"${name}" isn't a known skill or external tool — skipped` + (suggestion ? ` (did you mean "${suggestion}"?)` : ''));
 		}
-		if (isSafeName(name) && existsSync(path.join(SKILLS_DIR, 'core', name, 'SKILL.md'))) {
-			warn(`"${name}" is a core skill, bundled by presets rather than added individually — use "init" with a preset that includes it instead.`);
-			continue;
-		}
-		const suggestion = suggestName(name, await listKnownNames());
-		warn(`"${name}" isn't a known skill or external tool — skipped` + (suggestion ? ` (did you mean "${suggestion}"?)` : ''));
-	}
 
-	await writeWorkspaceManifest(targetDir, manifest.preset ?? 'custom', core, [...skills], [...external], remote);
-	await seedHideConfig(targetDir, justAdded);
-	console.log(
-		`\nAdded. .claude/skills/ now has ${core.length + skills.size + remote.length} skill(s); external: ${[...external].join(', ') || 'none'}; remote: ${remote.map((r) => r.name).join(', ') || 'none'}.\n`
-	);
+		await writeWorkspaceManifest(targetDir, manifest.preset ?? 'custom', core, [...skills], [...external], remote);
+		await seedHideConfig(targetDir, justAdded);
+		console.log(
+			`\nAdded. .claude/skills/ now has ${core.length + skills.size + remote.length} skill(s); external: ${[...external].join(', ') || 'none'}; remote: ${remote.map((r) => r.name).join(', ') || 'none'}.\n`
+		);
+	} catch (error) {
+		// Same rationale as installPreset's catch above: whatever this call
+		// already copied/fetched into .claude/skills/ before the throw is real
+		// on disk but was never written into workspace.yaml (that write hasn't
+		// happened yet), so undo it rather than leave a half-added workspace
+		// behind. `justAdded` can include external-tool names too — those have
+		// no directory under skillsDestDir, so fs.rm on them is just a no-op.
+		for (const name of justAdded) {
+			await fs.rm(path.join(skillsDestDir, name), { recursive: true, force: true }).catch(() => {});
+		}
+		throw new Error(
+			`Add failed partway through and was rolled back (removed ${justAdded.length} partially-added item(s)): ${error.message}`
+		);
+	}
 }
 
 /** Removes one or more globally-installed (--global add'ed) skills from ~/.claude/skills/. */

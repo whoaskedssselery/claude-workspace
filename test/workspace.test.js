@@ -614,6 +614,30 @@ describe('init', () => {
 		}
 	});
 
+	test('rolls back a partially-installed preset when a later skill throws mid-install', async () => {
+		const dir = tmpDir();
+		try {
+			// "debug" installs core: [debug-mode, commit-discipline, codegraph] in
+			// that order. Pre-creating a plain FILE where "commit-discipline"
+			// would be copied forces copySkill's fs.cp (directory -> existing
+			// non-directory) to throw for real, after "debug-mode" already
+			// succeeded — simulating the kind of uncaught mid-loop failure the
+			// rollback in installPreset is meant to catch (an fs error, not one
+			// of the individually-warned "skipped" cases).
+			await fs.mkdir(path.join(dir, '.claude', 'skills'), { recursive: true });
+			await fs.writeFile(path.join(dir, '.claude', 'skills', 'commit-discipline'), 'not a directory', 'utf8');
+
+			await assert.rejects(() => init('debug', dir, {}), /rolled back/);
+
+			// The skill that succeeded before the throw must not be left behind.
+			assert.equal(existsSync(path.join(dir, '.claude', 'skills', 'debug-mode')), false);
+			// Never got far enough to write a manifest for this failed attempt.
+			assert.equal(existsSync(path.join(dir, '.claude', 'workspace.yaml')), false);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
 	test('refuses to run again on an already-initialized project', async () => {
 		const dir = tmpDir();
 		try {
@@ -701,6 +725,26 @@ describe('addSkills', () => {
 			assert.equal(workspaceYaml.match(/writing-plans=/g)?.length, 1, 'not duplicated');
 		} finally {
 			console.warn = originalWarn;
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test('rolls back a partially-added set when a later name throws mid-add', async () => {
+		const dir = tmpDir();
+		try {
+			await init('oss-contribution', dir, {});
+			// Pre-create a plain FILE where the second requested format skill
+			// would be copied, so copySkill's fs.cp throws for real after the
+			// first one already succeeded — same technique as the installPreset
+			// rollback test above.
+			await fs.writeFile(path.join(dir, '.claude', 'skills', 'assignment-defend'), 'not a directory', 'utf8');
+
+			await assert.rejects(() => addSkills(dir, ['spike', 'assignment-defend']), /rolled back/);
+
+			assert.equal(existsSync(path.join(dir, '.claude', 'skills', 'spike')), false);
+			const workspaceYaml = await fs.readFile(path.join(dir, '.claude', 'workspace.yaml'), 'utf8');
+			assert.ok(!workspaceYaml.includes('spike'), 'the failed add must not be recorded in workspace.yaml either');
+		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
 	});
